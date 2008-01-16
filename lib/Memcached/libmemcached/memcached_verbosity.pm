@@ -1,6 +1,6 @@
 =head1 NAME
 
-memcached_flush
+memcached_verbosity
 
 =head1 LIBRARY
 
@@ -10,18 +10,13 @@ C Client Library for memcached (libmemcached, -lmemcached)
 
   #include <memcached.h>
 
-  memcached_return
-    memcached_flush (memcached_st *ptr,
-                     time_t expiration);
+  memcached_return memcached_verbosity (memcached_st *ptr,
+                                        unsigned int verbosity);
 
 =head1 DESCRIPTION
 
-memcached_flush() is used to wipe clean the contents of memcached(1) servers.
-It will either do this immediately or expire the content based on the
-expiration time passed to the method (a value of zero causes an immediate
-flush). The operation is not atomic to multiple servers, just atomic to a
-single server. That is, it will flush the servers in the order that they were
-added.
+memcached_verbosity() modifies the "verbosity" of the
+memcached(1) servers referenced in the C<memcached_st> parameter.
 
 =head1 RETURN
 
@@ -44,3 +39,4 @@ memcached(1) libmemcached(3) memcached_strerror(3)
 
 =cut
 
+1;
