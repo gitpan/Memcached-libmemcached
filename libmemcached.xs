@@ -128,10 +128,8 @@ memcached_get(Memcached__libmemcached ptr, \
 /*
 memcached_return
 memcached_mget(Memcached__libmemcached ptr, char **keys, size_t *key_length, unsigned int number_of_keys)
-    PREINIT:
-      number_of_keys= items - 1;
-      int i;
     CODE:
+        int i;
         Newxz(keys, number_of_keys, char *);
         Newxz(key_length, number_of_keys, size_t);
 
@@ -150,6 +148,12 @@ memcached_mget(Memcached__libmemcached ptr, char **keys, size_t *key_length, uns
 
 
 =head2 Functions for Managing Results from memcached
+/*
+memcached_result_st *
+memcached_fetch_result(Memcached__libmemcached ptr,\
+                       memcached_result_st *result,\
+                       memcached_return *error)
+*/
 
 =cut
 
@@ -177,6 +181,8 @@ memcached_strerror(Memcached__libmemcached ptr, memcached_return rc)
 
 SV *
 _memcached_version(Memcached__libmemcached ptr)
+    PREINIT:
+        memcached_return memcached_version(memcached_st *); /* declare memcached_version */
     PPCODE:
         /* memcached_version updates ptr->hosts[x].*_version for each
          * associated memcached server that responds to the request.
@@ -184,7 +190,7 @@ _memcached_version(Memcached__libmemcached ptr)
          * the min version for testing version-specific features.
          */
         /* XXX internal undocumented api */
-        memcached_return memcached_version(memcached_st *);
+        RETVAL = 0; /* avoid unused warning */
         if (memcached_version(ptr) != MEMCACHED_SUCCESS)
             XSRETURN_EMPTY;
         /* XXX assumes first entry in list of hosts responded

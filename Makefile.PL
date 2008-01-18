@@ -8,8 +8,9 @@ use Data::Dumper;
 use Cwd qw(abs_path);
 
 BEGIN {
-    if ($] < 5.006) {
-        warn "Perl version $] is below minimum 5.006 required.\n";
+    my $min = 5.008; # needed for XS length(other_arg) syntax
+    if ($] < $min) {
+        warn "Perl version $] is below minimum $min required.\n";
         exit 0;
     }
 }
@@ -88,6 +89,17 @@ svnmanifest::
 	svn list -R | grep -v '/$$' > MANIFEST
 	svn diff MANIFEST
 	svn status
+
+checkkeywords:
+	$(RM_RF) blib
+	find . -type f \( -name .svn -prune -o -name \*.pm -o -name \*.PL -o -name \*.pl \) \
+	    -exec bash -c '[ -z "$$(svn pg svn:keywords {})" ] && echo svn propset svn:keywords \"Id Revision\" {}' \;
+
+checkpod:
+	$(RM_RF) blib
+	find . -type f \( -name .svn -prune -o -name \*.pm -o -name \*.PL -o -name \*.pl \) \
+	    -exec podchecker {} \; 2>&1 | grep -v 'pod syntax OK'
+
 }
 }
 
@@ -111,9 +123,8 @@ sub build_libmemcached {
     return if -d "$lmcd_inst/lib"; # XXX assume it built ok. use 'make realclean' to rm
     mkdir $lmcd_inst, 0775 unless -d $lmcd_inst;
     run("cd $lmcd_src && make distclean") if -f "$lmcd_src/Makefile";
-    my $configure_args = '';#'--disable-shared';
+    my $configure_args = '--with-pic'; #'--disable-shared';
     if ($is_developer) {    # XXX make a Makefile.PL argument/option
-        $configure_args .= ' --with-pic';
         #$configure_args .= ' --enable-debug';
         warn "libmemcached configure $configure_args";
     }
