@@ -71,7 +71,9 @@ WriteMakefile(
 );
 
 
-sub MY::postamble {
+{   package MY;
+
+sub postamble {
 return qq{
 LMCD_SRC=$lmcd_src
 LMCD_INST=$lmcd_inst
@@ -82,6 +84,8 @@ clean ::
 realclean ::
 	$(RM_RF) $(LMCD_INST)
 	cd $(LMCD_SRC) && $(MAKE) distclean
+
+libmemcached.c : t/lib/ExtUtils/ParseXS.pm
 
 $(OBJECT) : $(LMCD_BUILT_LIB)
 
@@ -104,6 +108,14 @@ checkpod:
 }
 
 
+sub tool_xsubpp {
+    my $string = shift->SUPER::tool_xsubpp(@_);
+    # Insert -It/lib into: XSUBPPRUN = $(PERLRUN) $(XSUBPP)
+    $string =~ s{ ^ XSUBPPRUN \s* = .* }{XSUBPPRUN = \$(PERLRUN) -It/lib \$(XSUBPP)}xms;
+    return $string;
+}
+
+} # end of package MY
 
 exit 0;
 

@@ -14,11 +14,6 @@ TYPEMAP
 memcached_behavior                      T_IV
 memcached_return                        T_RETURN
 
-# --- types for mget/fetch ---
-# memcached_return*                       T_PV
-# size_t*                                 T_PV
-# memcached_result_st*                    T_PV
-
 # --- generic simple types ---
 # general uint16_t
 uint16_t                                T_UV
@@ -27,6 +22,7 @@ uint16_t                                T_UV
 uint64_t                                T_NV
 
 # --- perl api private abstraction typedefs ---
+lmc_key                                 T_KEY
 lmc_value                               T_VALUE
 lmc_data_flags_t                        T_FLAGS
 
@@ -40,23 +36,36 @@ T_RETURN
         $var = ($type)SvIV($arg)
 
 OUTPUT
+T_RETURN:init
+        RECORD_RETURN_ERR(ptr, $var);
+        if (TRACE_MEMCACHED(ptr))
+            warn(\"\t<= %s return %d %s\", \"${func_name}\", $var, memcached_strerror(ptr, $var));
 T_RETURN
         if (!SvREADONLY($arg)) {
             /* setup return value as a dualvar with int err code and string error message */
+            /* XXX could optimize later to reuse read-only char* from memcached_strerror */
             sv_setiv($arg, $var);
             /* XXX need to decide if success is true or false! */
             /* sv_setpv($arg, ($var) ? memcached_strerror(NULL, $var) : "XXX"); */
-            /* XXX could optimize later to reuse read-only char* from memcached_strerror */
             sv_setpv($arg, memcached_strerror(ptr, $var));
             SvIOK_on($arg);
         }
-        if (TRACE_MEMCACHED(ptr))
-            warn(\"\t<= %s return %d %s\", \"${func_name}\", $var, memcached_strerror(ptr, $var));
 
 INPUT
 T_PV
         /* treat undef as null pointer (output does the inverse) */
         $var = (SvOK($arg)) ? ($type)SvPV_nolen($arg) : NULL;
+
+INPUT
+T_KEY
+        /* treat undef as null pointer */
+        $var = (SvOK($arg)) ? ($type)SvPV_nolen($arg) : NULL;
+
+OUTPUT
+T_KEY
+        /* assumes the existance of a key_length variable holding the length */
+        if (!SvREADONLY($arg))
+            sv_setpvn((SV*)$arg, $var, key_length);
 
 INPUT
 T_VALUE
@@ -99,11 +108,13 @@ T_PTROBJ_RVIV
             warn(\"\t=> %s(%s %s = 0x%p)\", \"${func_name}\", \"${ntype}\", \"${var}\", (void*)$var);
 
 OUTPUT
+T_PTROBJ_RVIV:init
+        if (TRACE_MEMCACHED(ptr))
+            warn(\"\t<= %s(%s %s = %p)\", \"${func_name}\", \"${ntype}\", \"${var}\", (void*)$var);
 T_PTROBJ_RVIV
         if (!$var)          /* if null */
             SvOK_off($arg); /* then return as undef instead of reaf to undef */
-        else
+        else {
             sv_setref_pv($arg, \"${(my $ntt=$ntype)=~s/__/::/g;\$ntt}\", $var);
-        if (TRACE_MEMCACHED(ptr))
-            warn(\"\t<= %s(%s %s = %p)\", \"${func_name}\", \"${ntype}\", \"${var}\", (void*)$var);
+        }
 

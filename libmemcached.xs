@@ -12,11 +12,85 @@
 /* mapping C types to perl classes - keep typemap file in sync */
 typedef memcached_st*        Memcached__libmemcached;
 typedef uint32_t             lmc_data_flags_t;
+typedef char*                lmc_key;
 typedef char*                lmc_value;
 
 /* XXX quick hack for now */
 #define TRACE_MEMCACHED(ptr) \
     getenv("PERL_MEMCACHED_TRACE")
+
+#define RECORD_RETURN_ERR(ptr, ret)
+
+static memcached_return
+_prep_keys_lengths(memcached_st *ptr, SV *keys_rv, char ***out_keys, size_t **out_key_length, unsigned int *out_number_of_keys)
+{
+    SV *keys_sv;
+    unsigned int number_of_keys;
+    char **keys;
+    size_t *key_length;
+    int i = 0;
+
+    if (!SvROK(keys_rv))
+        return MEMCACHED_NO_KEY_PROVIDED;
+    keys_sv = SvRV(keys_rv);
+    if (SvRMAGICAL(keys_rv)) /* disallow tied arrays for now */
+        return MEMCACHED_NO_KEY_PROVIDED;
+
+    if (SvTYPE(keys_sv) == SVt_PVAV) {
+        number_of_keys = AvFILL(keys_sv)+1;
+        Newx(keys,       number_of_keys, char *);
+        Newx(key_length, number_of_keys, size_t);
+        for (i = 0; i < number_of_keys; i++) {
+            keys[i] = SvPV(AvARRAY(keys_sv)[i], key_length[i]);
+        }
+    }
+    else if (SvTYPE(keys_sv) == SVt_PVHV) {
+        HE *he;
+        I32 retlen;
+        hv_iterinit((HV*)keys_sv);
+        number_of_keys = HvKEYS(keys_sv);
+        Newx(keys,       number_of_keys, char *);
+        Newx(key_length, number_of_keys, size_t);
+        while ( (he = hv_iternext_flags((HV*)keys_sv, 0)) ) {
+            keys[i] = hv_iterkey(he, &retlen);
+            key_length[i++] = retlen;
+        }
+    }
+    else {
+        return MEMCACHED_NO_KEY_PROVIDED;
+    }
+    *out_number_of_keys = number_of_keys;
+    *out_keys           = keys;
+    *out_key_length     = key_length;
+    return MEMCACHED_SUCCESS;
+}
+
+
+static memcached_return
+_fetch_all_hashref(memcached_st *ptr, HV *dest_ref)
+{
+    memcached_return rc = MEMCACHED_MAXIMUM_RETURN; /* should never be returned */
+
+    while (1) {
+        char key[MEMCACHED_MAX_KEY];
+        size_t key_length;
+        char *value;
+        size_t value_length;
+        uint32_t flags = 0;
+        SV **svp;
+
+        value = memcached_fetch(ptr, key, &key_length, &value_length, &flags, &rc);
+        if (value == NULL)
+            break;
+
+        svp = hv_fetch(dest_ref, key, key_length, 1);
+        sv_setpvn(*svp, value, value_length);
+    }
+
+    return rc;
+}
+
+
 
 /* ====================================================================================== */
 
@@ -54,9 +128,12 @@ memcached_server_add_unix_socket(Memcached__libmemcached ptr, char *socket)
 
 void
 memcached_free(Memcached__libmemcached ptr)
+    ALIAS:
+        DESTROY = 1
     INIT:
         if (!ptr)   /* garbage or already freed this sv */
             XSRETURN_EMPTY;
+        PERL_UNUSED_VAR(ix);
     POSTCALL:
         if (ptr)    /* mark as undef to avoid duplicate free */
             SvOK_off((SV*)SvRV(ST(0)));
@@ -83,14 +160,14 @@ memcached_behavior_set(Memcached__libmemcached ptr, memcached_behavior flag, voi
 =cut
 
 memcached_return
-memcached_set(Memcached__libmemcached ptr, char *key, size_t length(key), char *value, size_t length(value), time_t expiration= 0, lmc_data_flags_t flags= 0)
+memcached_set(Memcached__libmemcached ptr, char *key, size_t byte length(key), char *value, size_t byte length(value), time_t expiration= 0, lmc_data_flags_t flags= 0)
 
 
 memcached_return
-memcached_append(Memcached__libmemcached ptr, char *key, size_t length(key), char *value, size_t length(value), time_t expiration= 0, lmc_data_flags_t flags=0)
+memcached_append(Memcached__libmemcached ptr, char *key, size_t byte length(key), char *value, size_t byte length(value), time_t expiration= 0, lmc_data_flags_t flags=0)
 
 memcached_return
-memcached_prepend(Memcached__libmemcached ptr, char *key, size_t length(key), char *value, size_t length(value), time_t expiration= 0, lmc_data_flags_t flags=0)
+memcached_prepend(Memcached__libmemcached ptr, char *key, size_t byte length(key), char *value, size_t byte length(value), time_t expiration= 0, lmc_data_flags_t flags=0)
 
 
 
@@ -99,10 +176,10 @@ memcached_prepend(Memcached__libmemcached ptr, char *key, size_t length(key), ch
 =cut
 
 memcached_return
-memcached_increment(Memcached__libmemcached ptr, char *key, size_t length(key), unsigned int offset, IN_OUT uint64_t value=NO_INIT)
+memcached_increment(Memcached__libmemcached ptr, char *key, size_t byte length(key), unsigned int offset, IN_OUT uint64_t value=NO_INIT)
 
 memcached_return
-memcached_decrement(Memcached__libmemcached ptr, char *key, size_t length(key), unsigned int offset, IN_OUT uint64_t value=NO_INIT)
+memcached_decrement(Memcached__libmemcached ptr, char *key, size_t byte length(key), unsigned int offset, IN_OUT uint64_t value=NO_INIT)
 
 
 
@@ -114,9 +191,9 @@ memcached_decrement(Memcached__libmemcached ptr, char *key, size_t length(key), 
 
 lmc_value
 memcached_get(Memcached__libmemcached ptr, \
-        char *key, size_t length(key), \
-        IN_OUT lmc_data_flags_t flags, \
-        IN_OUT memcached_return error)
+        char *key, size_t byte length(key), \
+        OUT lmc_data_flags_t flags=0, \
+        OUT memcached_return error=0)
     PREINIT:
         size_t value_length=0;
     CODE:
@@ -124,25 +201,59 @@ memcached_get(Memcached__libmemcached ptr, \
     OUTPUT:
         RETVAL
 
-=head2 Function Patrick is trying to figure out
-/*
-memcached_return
-memcached_mget(Memcached__libmemcached ptr, char **keys, size_t *key_length, unsigned int number_of_keys)
-    CODE:
-        int i;
-        Newxz(keys, number_of_keys, char *);
-        Newxz(key_length, number_of_keys, size_t);
 
-        for (i = 0; i < number_of_keys; i++) {
-            keys[i] = SvPV(ST(i + 1), key_length[i]);
+
+memcached_return
+memcached_mget(Memcached__libmemcached ptr, SV *keys_rv)
+    PREINIT:
+        char **keys;
+        size_t *key_length;
+        unsigned int number_of_keys;
+    CODE:
+        if ((RETVAL = _prep_keys_lengths(ptr, keys_rv, &keys, &key_length, &number_of_keys)) == MEMCACHED_SUCCESS) {
+            RETVAL = memcached_mget(ptr, keys, key_length, number_of_keys);
+            Safefree(keys);
+            Safefree(key_length);
         }
-        Safefree(keys);
-        Safefree(key_length);
     OUTPUT:
         RETVAL
-*/
-=cut
 
+memcached_return
+memcached_mget_into_hashref(Memcached__libmemcached ptr, SV *keys_ref, HV *dest_ref)
+    PREINIT:
+        char **keys;
+        size_t *key_length;
+        unsigned int number_of_keys;
+    CODE:
+        memcached_return ret;
+        if ((ret = _prep_keys_lengths(ptr, keys_ref, &keys, &key_length, &number_of_keys)) == MEMCACHED_SUCCESS) {
+            ret = memcached_mget(ptr, keys, key_length, number_of_keys);
+            Safefree(keys);
+            Safefree(key_length);
+            if (ret == MEMCACHED_SUCCESS) {
+                RETVAL = _fetch_all_hashref(ptr, dest_ref);
+            }
+        }
+    OUTPUT:
+        RETVAL
+
+
+
+lmc_value
+memcached_fetch(Memcached__libmemcached ptr, \
+        OUT lmc_key key, \
+        OUT lmc_data_flags_t flags=0, \
+        OUT memcached_return error=0)
+    PREINIT:
+        size_t key_length=0;
+        size_t value_length=0;
+    INIT: 
+        char key_buffer[MEMCACHED_MAX_KEY];
+        key = key_buffer;
+    CODE:
+        RETVAL = memcached_fetch(ptr, key, &key_length, &value_length, &flags, &error);
+    OUTPUT:
+        RETVAL
 
 
 
@@ -163,7 +274,7 @@ memcached_fetch_result(Memcached__libmemcached ptr,\
 =cut
 
 memcached_return
-memcached_delete(Memcached__libmemcached ptr, char *key, size_t length(key), time_t expiration= 0)
+memcached_delete(Memcached__libmemcached ptr, char *key, size_t byte length(key), time_t expiration= 0)
 
 
 
