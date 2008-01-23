@@ -1,26 +1,16 @@
 General:
 
+Document all typedef actions on input and output
+
 Structure:
     Aim to be at least thread-safe and ideally thread-hot.
     Add MEMCACHED_BEHAVIOR_USER_DATA structure
-        hold last memcached_return value
         will also hold PrintError & RaiseError flags
-    Add memcached_perl_err($memc) to return last memcached_return value
-
-Errors:
-    Is success true or false?
-    Make return type a dual-var like $! with integer and string message parts.
-        add tests for it
+    Resolve uint64_t issues (esp re cas)
 
 Tests:
 
-Add wrapper around memcached_fetch that fetches all into a hash ref
-(allow an optional existing hash ref to be passed).
-
 CPAN:
-    Fix pod to be pod:
-    http://search.cpan.org/src/TIMB/Memcached-libmemcached-0.1301/lib/Memcached/libmemcached/memcached_auto.pod
-    (may need to edit somehow to add package declaration)
     Find out how to get more info into a cpan-testers NA report.
 
 Compatibility:
@@ -28,7 +18,7 @@ Compatibility:
         use constant F_STORABLE => 1;
         use constant F_COMPRESS => 2;
        +use constant F_UTF8     => 4; <= new patch from sugi@nemui.org
-    We should certainly support UTF8 and using the same flag bit is sane
+    We should certainly support UTF8 in some way and using the same flag bit is sane
     (will reduce migration problems).
     Should we support automatic storable/compress or leave those to higher level code?
     Could support generic get & set key and get & set value callback hooks.
@@ -41,6 +31,4 @@ Consider  memcached_fetch_execute API
 +                          void *context,
 +                          unsigned int number_of_callbacks
 +                         )
-
-MEMCACHED_BEHAVIOR_USER_DATA needs free/cleanup func
 

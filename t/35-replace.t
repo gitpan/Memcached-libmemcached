@@ -9,21 +9,21 @@ use Test::More;
 use Memcached::libmemcached
     #   functions explicitly tested by this file
     qw(
-        memcached_prepend
-        memcached_append
+        memcached_replace
     ),
     #   other functions used by the tests
     qw(
         memcached_set
         memcached_get
+        memcached_errstr
     );
 
 use lib 't/lib';
 use libmemcached_test;
 
-my $pre= 'begin ';
-my $end= ' end';
-my $k1= 'abc';
+my $k1= "replace-".time();
+my $orig= 'original content';
+my $repl= 'replaced stuff';
 my $flags;
 my $rc;
 
@@ -31,17 +31,16 @@ my $memc = libmemcached_test_create({ min_version => "1.2.4" });
 
 plan tests => 6;
 
-my $orig = "middle";
+ok !memcached_replace($memc, $k1, $repl),
+    'should fail on non-existing key';
+
 ok memcached_set($memc, $k1, $orig);
 
-ok memcached_prepend($memc, $k1, $pre);
-
-ok memcached_append($memc, $k1, $end);
+ok memcached_replace($memc, $k1, $repl);
 
 my $ret= memcached_get($memc, $k1, $flags=0, $rc=0);
-ok $rc, 'memcached_get rc should be true';
+ok $rc, 'memcached_get should work';
 ok defined $ret, 'memcached_get result should be defined';
 
-my $combined= $pre . $orig . $end;
-cmp_ok $ret, 'eq', $combined;
+cmp_ok $ret, 'eq', $repl, 'should return replaced value';
 

@@ -9,11 +9,11 @@ Memcached::libmemcached - Thin fast full interface to the libmemcached client AP
 
 =head1 VERSION
 
-Version 0.1308
+Version 0.1309
 
 =cut
 
-our $VERSION = '0.1308';
+our $VERSION = '0.1309';
 
 use Carp;
 use base qw(Exporter);
@@ -214,6 +214,21 @@ Disconnect from all currently connected servers and reset state.
 Not normally called explicitly.
 See L<Memcached::libmemcached::memcached_quit>.
 
+=head3 memcached_errstr
+
+  $errstr = memcached_errstr($memc);
+
+Returns the error message and code from the most recent call to any
+libmemcached function that returns a C<memcached_return>, which most do.
+
+The return value is a I<dualvar>, like $!, which means it has separate numeric
+and string values. The numeric value is the memcached_return integer value,
+and the string value is the corresponding error message what memcached_strerror()
+would return.
+
+As a special case, if the memcached_return is MEMCACHED_ERRNO, indicating a
+system call error, then the string returned by strerror() is appended.
+
 =cut
 
 
@@ -244,6 +259,27 @@ $expiration and $flags are both optional and default to 0.
 
 Prepend $value to the value of $key. $key must already exist.
 $expiration and $flags are both optional and default to 0.
+
+=head3 memcached_replace
+
+  memcached_replace($memc, $key, $value)
+  memcached_replace($memc, $key, $value, $expiration, $flags)
+
+Replace with $value the existing value of the value stored with
+$key. $key must already exist.  $expiration and $flags are both
+optional and default to 0.
+
+=head3 memcached_cas
+
+  memcached_cas($memc, $key, $value, $expiration, $flags, $cas)
+
+Overwrites data in the server stored as $key as long as $cas
+is still the same in the server. Cas is still buggy in memached.
+Turning on support for it in libmemcached is optional.
+Please see memcached_behavior_set() for information on how to do this.
+
+XXX and the memcached_result_cas() function isn't implemented yet
+so you can't get the $cas to use.
 
 =cut
 
@@ -359,6 +395,23 @@ See also L<Memcached::libmemcached::memcached_strerror>.
 This function is rarely needed in the Perl interface because the return code is
 a I<dualvar> that already contains the error string.
 
+=cut
+
+=head2 Unsupported Functions
+
+=head3 memcached_cas 
+=cut
+
+=head3 (stats)   
+=cut
+
+=head3 (disconnect/quit)
+=cut
+
+=head3 memcached_flush 
+=cut
+
+=head3 memcached_replace
 =cut
 
 
