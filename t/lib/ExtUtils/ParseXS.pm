@@ -644,7 +644,7 @@ EOF
       # do initialization of input variables
       $thisdone = 0;
       $retvaldone = 0;
-      $deferred = "";
+      %deferred;
       %arg_list = () ;
       $gotRETVAL = 0;
 	
@@ -689,10 +689,13 @@ EOF
 	  $processing_arg_with_types = 1;
 	  INPUT_handler() ;
 	}
-	print $deferred;
+	print delete $deferred{post_input};
 	
         process_keyword("INIT|ALIAS|ATTRS|PROTOTYPE|INTERFACE_MACRO|INTERFACE|C_ARGS|OVERLOAD") ;
 	
+	print delete $deferred{pre_call};
+	print delete $deferred{auto_length_init};
+
 	if (check_keyword("PPCODE")) {
 	  print_section();
 	  death ("PPCODE must be last thing") if @line;
@@ -810,6 +813,7 @@ EOF
       }
       last if $_ eq "$END:";
       death(/^$BLOCK_re/o ? "Misplaced `$1:'" : "Junk at end of function");
+      warn "internal error: deferred '$_' not consumed\n" for keys %deferred;
     }
     
     print Q(<<"EOF") if $except;
@@ -1122,10 +1126,10 @@ sub INPUT_handler {
 
     # Process the length(foo) declarations
     if (s/^([^=]*?) (\b byte|\b utf8|) \s+ length \(\s*(\w+)\s*\)\s*$/$1 XSauto_length_of_$3=NO_INIT/x) {
-      print "\tSTRLEN\tSTRLEN_length_of_$3;\n";
-      $lengthof{$3} = $2;   # '' or 'byte' or 'utf8'
-      # $islengthof{$name} = $1;
-      $deferred .= "\n\tXSauto_length_of_$3 = STRLEN_length_of_$3;";
+      my $length_var = "STRLEN_length_of_$3";
+      $lengthof{$3} = [ $2, $length_var, $3 ];   # '' or 'byte' or 'utf8'
+      print "\tSTRLEN\t$length_var;\n";
+      $deferred{auto_length_init} .= "\tXSauto_length_of_$3 = $length_var;\n";
     }
 
     # check for optional initialisation code
@@ -1672,7 +1676,7 @@ sub output_init {
       warn $@   if  $@;
       $init =~ s/^;//;
     }
-    $deferred .= eval qq/"\\n\\t$init\\n"/;
+    $deferred{post_input} .= eval qq/"\\n\\t$init\\n"/;
     warn $@   if  $@;
   }
 }
@@ -1703,6 +1707,7 @@ sub generate_init {
   local($argoff) = $num - 1;
   local($ntype);
   local($tk);
+  local($length_var);   # name of STRLEN C var to use if $lengthof{$var} is true
 
   $type = TidyType($type) ;
   blurt("Error: '$type' not in typemap"), return
@@ -1712,18 +1717,26 @@ sub generate_init {
   ($subtype = $ntype) =~ s/(?:Array)?(?:Ptr)?$//;
   $tk = $type_kind{$type};
   $tk =~ s/OBJ$/REF/ if $func_name =~ /DESTROY$/;
-  if ($tk eq 'T_PV' and exists $lengthof{$var}) {
-    my $encoding = $lengthof{$var}; # '' or 'byte' or 'utf8'
-    print "\t$var" unless $name_printed;
-    print " = ($type)SvPV$encoding($arg, STRLEN_length_of_$var);\n";
-    die "default value not supported with length(NAME) supplied"
-      if defined $defaults{$var};
-    return;
-  }
+
   $type =~ tr/:/_/ unless $hiertype;
-  blurt("Error: No INPUT definition for type '$type', typekind '$type_kind{$type}' found"), return
-    unless defined $input_expr{$tk} ;
   $expr = $input_expr{$tk};
+  blurt("Error: No INPUT definition for type '$type', typekind '$type_kind{$type}' found"), return
+    unless defined $expr;
+
+  if ($lengthof{$var}) {
+    # encoding is '' or 'byte' or 'utf8'
+    (my $encoding, $length_var, my $related_var) = @{ $lengthof{$var} };
+    if ($tk eq 'T_PV') { # hardwired support for plain T_PV (char *)
+      print "\t$var" unless $name_printed;
+      print " = ($type)SvPV$encoding($arg, $length_var);\n";
+      die "default value not supported with length(NAME) supplied"
+        if defined $defaults{$var};
+      return;
+    }
+    die "length($var) not supported for $var type '$type' ($tk) because it doesn't contain \$length_var\n"
+      if $expr !~ m/\$length_var\b/;
+  }
+
   if ($expr =~ /DO_ARRAY_ELEM/) {
     blurt("Error: '$subtype' not in typemap"), return
       unless defined($type_kind{$subtype});
@@ -1751,9 +1764,9 @@ sub generate_init {
       warn $@   if  $@;
     }
     if ($defaults{$var} eq 'NO_INIT') {
-      $deferred .= eval qq/"\\n\\tif (items >= $num) {\\n$expr;\\n\\t}\\n"/;
+      $deferred{post_input} .= eval qq/"\\n\\tif (items >= $num) {\\n$expr;\\n\\t}\\n"/;
     } else {
-      $deferred .= eval qq/"\\n\\tif (items < $num)\\n\\t    $var = $defaults{$var};\\n\\telse {\\n$expr;\\n\\t}\\n"/;
+      $deferred{post_input} .= eval qq/"\\n\\tif (items < $num)\\n\\t    $var = $defaults{$var};\\n\\telse {\\n$expr;\\n\\t}\\n"/;
     }
     warn $@   if  $@;
   } elsif ($ScopeThisXSUB or $expr !~ /^\s*\$var =/) {
@@ -1763,13 +1776,17 @@ sub generate_init {
       eval qq/print "\\t$var;\\n"/;
       warn $@   if  $@;
     }
-    $deferred .= eval qq/"\\n$expr;\\n"/;
+    $deferred{post_input} .= eval qq/"\\n$expr;\\n"/;
     warn $@   if  $@;
   } else {
     die "panic: do not know how to handle this branch for function pointers"
       if $name_printed;
     eval qq/print "$expr;\\n"/;
     warn $@   if  $@;
+  }
+  if ($expr = $input_expr{$tk.":pre_call"}) {
+      $deferred{pre_call} .= eval "qq\a$expr;\n\a";
+      warn $@ if $@;
   }
 }
 

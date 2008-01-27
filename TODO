@@ -1,9 +1,19 @@
 General:
 
+memcached_get whith no memcached servers running returns 'not found' - is that appropriate?
+Add cas to callback
+Need memcached_mget_by_key_into_hashref
+
+Refactor memcached_get_by_key and memcached_get to factor out common code.
+
 Document all typedef actions on input and output
 All version api and add tests to cross-check the pm $VERSION
+
 Resolve mapping of error codes to booleans
 (see parse_*_reply in http://search.cpan.org/src/KROKI/Cache-Memcached-Fast-0.07/src/client.c)
+
+Write a pod that lists all the enum types and their constants
+so people can see which tag to use to import a constant.
 
 Structure:
     Aim to be at least thread-safe and ideally thread-hot.
@@ -26,12 +36,9 @@ Compatibility:
     Should we support automatic storable/compress or leave those to higher level code?
     Could support generic get & set key and get & set value callback hooks.
     Like BerkeleyDB filters: http://search.cpan.org/~pmqs/BerkeleyDB/BerkeleyDB.pod#DBM_Filters
-    Write Cache::Memcached emulation and run its test suite.
+    Write Cache::Memcached* emulations and run their test suites.
 
-Consider  memcached_fetch_execute API
-    memcached_fetch_execute(memcached_st *ptr,
-+                          unsigned int (*callback[])(memcached_st *ptr, memcached_result_st *result, void *context),
-+                          void *context,
-+                          unsigned int number_of_callbacks
-+                         )
+Random thoughts...
 
+    For *_by_key functions, if $master_key is undef then use some per-$memc mechanism,
+    such as a pre-stored scalar, or a callback, to get the value.
