@@ -9,11 +9,11 @@ Memcached::libmemcached - Thin fast full interface to the libmemcached client AP
 
 =head1 VERSION
 
-Version 0.1404 (with libmemcached-0.14 embedded)
+Version 0.1601 (with libmemcached-0.16 embedded)
 
 =cut
 
-our $VERSION = '0.1404';
+our $VERSION = '0.1701';
 
 use Carp;
 use base qw(Exporter);
@@ -77,21 +77,39 @@ For more information on libmemcached, see L<http://tangent.org/552/libmemcached.
 
 The term "memcache" is used to refer to the C<memcached_st> structure at the
 heart of the libmemcached library. We'll use $memc to represent this
-structure in perl code.
+structure in perl code. (The libmemcached library documentation uses C<ptr>.)
+
+=head2 Traditional and Object-Oriented
+
+There are two ways to use the functionality offered by this module:
+
+B<*> You can import the functions you want to use and call them explicitly.
+
+B<*> Or, you can use $memc as an object and call most of the functions as methods.
+You can do that for any function that takes a $memc (ptr) as its first
+argument, which is almost all of them.
+
+Since the primary focus of this module is to be a thin wrapper around
+libmemcached, the bulk of this documentation describes the traditional
+functional interface.
+
+The object-oriented interface is mainly targeted at modules wishing to subclass
+Memcached::libmemcached, such as Cache::Memcached::libmemcached.  For more information
+see L</OBJECT-ORIENTED INTERFACE>.
 
 =head2 Function Names and Arguments
 
-The function names in this module are exactly the same as the functions in the
-libmemcached library and documentation.
+The function names in the libmemcached library have exactly the same names in
+Memcached::libmemcached.
 
 The function arguments are also the same as the libmemcached library and
 documentation, with two exceptions:
 
-* There are no I<length> arguments. Wherever the libmemcached documentation
+B<*> There are no I<length> arguments. Wherever the libmemcached documentation
 shows a length argument (input or output) the corresponding argument doesn't
 exist in the Perl API because it's not needed.
 
-* Some arguments are optional.
+B<*> Some arguments are optional.
 
 Many libmemcached function arguments are I<output values>: the argument is the
 address of the value that the function will modify. For these the perl function
@@ -110,16 +128,28 @@ is handled.
 Most of the functions return an integer status value. This is shown as
 C<memcached_return> in the libmemcached documentation.
 
-In the perl interface this value is not returned directly. Instead a simple
+In the perl interface this value is I<not> returned directly. Instead a simple
 boolean is returned: true for 'success', defined but false for some
-'unsuccessfull' conditions, and undef for all other cases (i.e., errors).
+'unsuccessful' conditions like 'not found', and undef for all other cases (i.e., errors).
 
 All the functions documented below return this simple boolean value unless
 otherwise indicated.
 
 The actual C<memcached_return> integer value, and corresponding error message,
 for the last libmemcached function call can be accessed via the
-L</memcached_errstr> function.
+L</errstr> method.
+
+=head2 Unimplemented Functions
+
+Functions relating to managing lists of servers (memcached_server_push, and
+memcached_server_list) have not been implemenetd because they're not needed and
+likely to be deprecated by libmemcached.
+
+Functions relating to iterating through results (memcached_result_*) have not
+been implemented yet. They're not a priority because similar functionality is
+available via the callbacks. See L</set_callback_coderefs>.
+
+Functions relating to stats should be implemented soonish. Patches welcome!
 
 =cut
 
@@ -141,6 +171,8 @@ functions, for example, you can use:
 
   use Memcached::libmemcached qw(/^memcached/);
 
+Refer to L<Memcached::libmemcached::constants> for a full list of the available
+constants and the tags they are grouped by.
 
 =head1 FUNCTIONS
 
@@ -163,19 +195,11 @@ See L<Memcached::libmemcached::memcached_create>.
 
 =head3 memcached_free
 
-  memcached_free($memc); # void
+  memcached_free($memc);
 
 Frees the memory associated with $memc.
-Your application will leak memory unless you call this.
-After calling it $memc must not be used.
+After calling it $memc can't be used.
 See L<Memcached::libmemcached::memcached_create>.
-
-=head3 memcached_server_push
-
-  memcached_server_push($memc, $server_list_object);
-
-Adds a list of servers to the libmemcached object.
-See L<Memcached::libmemcached::memcached_servers>.
 
 =head3 memcached_server_count
 
@@ -212,43 +236,6 @@ See L<Memcached::libmemcached::memcached_behavior>.
 
 Get the value of a particular option.
 See L<Memcached::libmemcached::memcached_behavior>.
-
-=head3 memcached_verbosity
-
-  memcached_verbosity($memc, $verbosity)
-
-Modifies the "verbosity" of the associated memcached servers.
-See L<Memcached::libmemcached::memcached_verbosity>.
-
-=head3 memcached_flush
-
-  memcached_flush($memc, $expiration);
-
-Wipe clean the contents of associated memcached servers.
-See L<Memcached::libmemcached::memcached_flush>.
-
-=head3 memcached_quit
-
-  memcached_quit($memc);
-
-Disconnect from all currently connected servers and reset state.
-Not normally called explicitly.
-See L<Memcached::libmemcached::memcached_quit>.
-
-=head3 memcached_errstr
-
-  $errstr = memcached_errstr($memc);
-
-Returns the error message and code from the most recent call to any
-libmemcached function that returns a C<memcached_return>, which most do.
-
-The return value is a I<dualvar>, like $!, which means it has separate numeric
-and string values. The numeric value is the memcached_return integer value,
-and the string value is the corresponding error message what memcached_strerror()
-would return.
-
-As a special case, if the memcached_return is MEMCACHED_ERRNO, indicating a
-system call error, then the string returned by strerror() is appended.
 
 =cut
 
@@ -339,17 +326,7 @@ operations it is always faster to use this function. You I<must> then use
 memcached_fetch() or memcached_fetch_result() to retrieve any keys found.
 No error is given on keys that are not found.
 
-Instead of this function, you'd normally use L</memcached_mget_into_hashref>.
-
-=head3 memcached_mget_into_hashref
-
-  memcached_mget_into_hashref($memc, $keys_ref, \%dest_hash);
-
-Combines memcached_mget() and a memcached_fetch() loop into a single highly
-efficient call.
-
-Fetched values are stored in \%dest_hash, updating existing values or adding
-new ones as appropriate.
+Instead of this function, you'd normally use the L</mget_into_hashref> method.
 
 =head3 memcached_fetch
 
@@ -362,9 +339,9 @@ Returns undef if there are no more values.
 If $flag is given then it will be updated to whatever flags were stored with the value.
 If $rc is given then it will be updated to the return code.
 
-This is similar to L<memcached_get> except its fetching the results from the previous
+This is similar to L</memcached_get> except its fetching the results from the previous
 call to L</memcached_mget> and $key is an output parameter instead of an input.
-Usually you'd just use L</memcached_mget_into_hashref> instead.
+Usually you'd just use the L</mget_into_hashref> method instead.
 
 =cut
 
@@ -388,13 +365,6 @@ See also L<Memcached::libmemcached::memcached_auto>.
 =cut
 
 
-=head2 Functions for Managing Results from memcached
-
-XXX http://hg.tangent.org/libmemcached/file/4001ba159d62/docs/memcached_result_st.pod
-
-=cut
-
-
 =head2 Functions for Deleting Values from memcached
 
 See L<Memcached::libmemcached::memcached_delete>.
@@ -412,6 +382,8 @@ memcached after that many seconds.
 
 =head2 Functions for Accessing Statistics from memcached
 
+Not yet implemented.
+
 See L<Memcached::libmemcached::memcached_stats>.
 
 =cut
@@ -426,17 +398,42 @@ See L<Memcached::libmemcached::memcached_stats>.
 Returns a simple version string, like "0.15", representing the libmemcached
 version (version of the client library, not server).
 
+=head2 memcached_version
+
+  $version = memcached_version($memc)
+  ($major, $minor, $micro) = memcached_version($memc)
+
+Returns the version of the first memcached server (in the list associated with
+$memc) to respond to the version request.
+
+In scalar context returns a simple version string, like "1.2.3".
+In list context returns the individual version component numbers.
+Returns an empty list if there was an error.
+
+Note that the return value differs from that of the underlying libmemcached
+library memcached_version() function.
+
 =head2 memcached_verbosity
 
   memcached_verbosity($memc, $verbosity)
 
 Modifies the "verbosity" of the memcached servers associated with $memc.
+See L<Memcached::libmemcached::memcached_verbosity>.
+
+=head3 memcached_flush
+
+  memcached_flush($memc, $expiration);
+
+Wipe clean the contents of associated memcached servers.
+See L<Memcached::libmemcached::memcached_flush>.
 
 =head2 memcached_quit
 
   memcached_quit($memc)
 
-Disconnects from all servers
+Disconnect from all currently connected servers and reset libmemcached state associated with $memc.
+Not normally called explicitly.
+See L<Memcached::libmemcached::memcached_quit>.
 
 =head3 memcached_strerror
 
@@ -448,20 +445,6 @@ See also L<Memcached::libmemcached::memcached_strerror>.
 
 This function is rarely needed in the Perl interface because the return code is
 a I<dualvar> that already contains the error string.
-
-=head3 memcached_set_callback_coderefs
-
-  memcached_set_callback_coderefs($memc, \&set_callback, \&get_callback);
-
-This interface is I<experimental> and I<likely to change>.
-Currently only the get calback works.
-
-Specify functions which will be executed when values are set and/or get using $memc. 
-
-When the callbacks are executed $_ is the value and the arguments are the key
-and flags value. Both $_ and the flags may be modified.
-
-Currently the functions must return an empty list.
 
 =cut
 
@@ -518,6 +501,104 @@ By-key variants of L</Functions for Setting Values>:
 
 =head3 memcached_delete_by_key
 
+=head1 OBJECT-ORIENTED INTERFACE
+
+=head2 Methods
+
+=head3 new
+
+  $memc = $class->new; # same as memcached_create()
+
+=head3 errstr
+
+  $errstr = $memc->errstr;
+
+Returns the error message and code from the most recent call to any
+libmemcached function that returns a C<memcached_return>, which most do.
+
+The return value is a I<dualvar>, like $!, which means it has separate numeric
+and string values. The numeric value is the memcached_return integer value,
+and the string value is the corresponding error message what memcached_strerror()
+would return.
+
+As a special case, if the memcached_return is MEMCACHED_ERRNO, indicating a
+system call error, then the string returned by strerror() is appended.
+
+This method is also currently callable as memcached_errstr() for compatibility
+with an earlier version, but that deprecated alias will start warning and then
+cease to exist in future versions.
+
+=head3 mget_into_hashref
+
+  $memc->mget_into_hashref( \@keys, \%dest_hash); # keys from array
+  $memc->mget_into_hashref( \%keys, \%dest_hash); # keys from hash
+
+Combines memcached_mget() and a memcached_fetch() loop into a single highly
+efficient call.
+
+Fetched values are stored in \%dest_hash, updating existing values or adding
+new ones as appropriate.
+
+This method is also currently callable as memcached_mget_into_hashref() for
+compatibility with an earlier version, but that deprecated alias will start
+warning and then cease to exist in future versions.
+
+=head3 get_multi
+
+  $hash_ref = $memc->get_multi( @keys );
+
+Effectively the same as:
+
+  $memc->mget_into_hashref( \@keys, $hash_ref = { } )
+
+So it's very similar to L</mget_into_hashref> but less efficient for large
+numbers of keys (because the keys have to be pushed onto the argument stack)
+and less flexible (because you can't add/update elements into an existing hash).
+
+This method is provided to optimize subclasses that want to provide a
+Cache::Memcached compatible API with maximum efficiency.
+Note, however, that C<get_multi> does I<not> support the L<Cache::Memcached>
+feature where a key can be a reference to an array [ $master_key, $key ].
+Use L</memcached_mget_by_key> directly if you need that feature.
+  
+=head3 get
+
+  $value = $memc->get( $key );
+
+Effectively the same as:
+
+  $vaue = memcached_get( $memc, $key );
+
+The C<get> method also supports the L<Cache::Memcached> feature where $key can
+be a reference to an array [ $master_key, $key ]. In which case the call is
+effectively the same as:
+
+  $vaue = memcached_get_by_key( $memc, $key->[0], $key->[1] )
+
+
+=head3 set_callback_coderefs
+
+  $memc->set_callback_coderefs(\&set_callback, \&get_callback);
+
+This interface is I<experimental> and I<likely to change>. (It's also currently
+used by Cache::libmemcached, so don't use it if you're using that module.)
+
+Specify functions which will be executed when values are set and/or get using $memc. 
+
+When the callbacks are executed $_ is the value and the arguments are the key
+and flags value. Both $_ and the flags may be modified.
+
+Currently the functions must return an empty list.
+
+This method is also currently callable as memcached_set_callback_coderefs() for
+compatibility with an earlier version, but that deprecated alias will start
+warning and then cease to exist in future versions.
+
+=head2 Reference
+
+The $memc variable 
+
+
 =head1 EXTRA INFORMATION
 
 =head2 Tracing Execution
@@ -537,6 +618,24 @@ For pointer arguments, undef is mapped to null on input and null is mapped to
 undef on output.
 
 XXX expand with details from typemap file
+
+=head2 Deprecated Functions
+
+The following functions are available but deprecated in this release.
+In the next release they'll generate warnings.
+In a future release they'll be removed.
+
+=head3 memcached_errstr
+
+Use L</errstr> instead.
+
+=head3 memcached_mget_into_hashref
+
+Use L</mget_into_hashref> instead.
+
+=head3 memcached_set_callback_coderefs
+
+Use L</set_callback_coderefs> instead.
 
 =head1 AUTHOR
 

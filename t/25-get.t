@@ -10,9 +10,9 @@ use Test::More;
 use Memcached::libmemcached
     #   functions explicitly tested by this file
     qw(
+        memcached_get
         memcached_mget
         memcached_fetch
-        memcached_mget_into_hashref
     ),
     #   other functions used by the tests
     qw(
@@ -25,11 +25,12 @@ use libmemcached_test;
 my $memc = libmemcached_test_create();
 
 my $items = 5;
-plan tests => $items + 3
+plan tests => ($items * 3) + 3
     + 2 * (1 + $items * 2 + 1)
-    + $items + 4;
+    + $items + 6
+    + $items + 7;
 
-my ($rv, $rc, $flags);
+my ($rv, $rc, $flags, $tmp);
 my $t1= time();
 
 my %data = map { ("k$_.$t1" => "v$_.$t1") } (1..$items-2);
@@ -38,6 +39,12 @@ $data{"kL.LLLLLLLLLLLLLLLLLL"} = "vLLLLLLLLLLLLLLLLLLLL";
 $data{"kS.S"} = "vS";
 
 ok memcached_set($memc, $_, $data{$_})
+    for keys %data;
+
+is memcached_get($memc, $_), $data{$_}
+    for keys %data;
+
+is $memc->get($_), $data{$_}
     for keys %data;
 
 ok !memcached_mget($memc, undef);
@@ -62,7 +69,7 @@ for my $keys_ref (
     is_deeply \%got, \%data;
 }
 
-print "memcached_mget_into_hashref\n";
+print "mget_into_hashref\n";
 
 # tweak data so it's different from previous tests
 %data = map { $_ . "a" } %data;
@@ -71,17 +78,48 @@ print "memcached_mget_into_hashref\n";
 ok memcached_set($memc, $_, $data{$_})
     for keys %data;
 
-ok memcached_mget_into_hashref($memc, [ ], {}),
+ok $memc->mget_into_hashref([ ], {}),
     'should return true, even if no keys';
 
-ok memcached_mget_into_hashref($memc, [ 'none such foo' ], {}),
+ok $memc->mget_into_hashref([ 'none such foo' ], {}),
     'should return true, even if no results';
 
 my %extra = ( foo => 'bar' );
 # reset got data, but not to empty so we check the hash isn't erased
 my %got = %extra;
-ok memcached_mget_into_hashref($memc, [ keys %data ], \%got),
+ok $memc->mget_into_hashref([ keys %data ], \%got),
     'should return true';
 
 is_deeply \%got, { %data, %extra };
 
+# refetch with duplicate keys, mainly to trigger realloc of key buffers
+ok $memc->mget_into_hashref([ (keys %data) x 10 ], \%got),
+    'should return true';
+
+is_deeply \%got, { %data, %extra };
+
+
+print "get_multi\n";
+
+# tweak data so it's different from previous tests
+%data = map { $_ . "b" } %data;
+
+ok memcached_set($memc, $_, $data{$_})
+    for keys %data;
+
+is_deeply $memc->get_multi(), {},
+    'should return empty hash for no keys';
+
+is_deeply $memc->get_multi('none such foo'), {},
+    'should return empty hash if no results';
+
+$tmp = $memc->get_multi(keys %data);
+ok $tmp;
+is ref $tmp, 'HASH';
+is scalar keys %$tmp, scalar keys %data;
+is_deeply $tmp, \%data,
+    'results should match';
+
+# refetch with duplicate keys, mainly to trigger realloc of key buffers
+is_deeply $memc->get_multi((keys %data) x 10), \%data,
+    'should return true';

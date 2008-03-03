@@ -2,7 +2,26 @@
 
 Memcached::libmemcached::Changes - List of significant changes
 
-As of $Date: 2008-01-08 15:54:15 +0000 (Tue, 08 Jan 2008) $ $Revision: 106 $
+As of $Date: 2008-01-08 15:54:15 +0000 (Tue, 08 Jan 2008) $ $Revision: 128 $
+
+=head2 Changes in 0.1701 (svn r129) 3rd March 2008
+
+  Sync with libmemcached 0.17.
+  Perl API for memcached_version returns the version info.
+  Added auto-generated Memcached::libmemcached::constants docs.
+  Improved docs.
+  Assorted minor fixes.
+
+=head2 Changes in 0.1405 (svn rXXX)
+
+  Added official object-oriented API for perl-specific extensions.
+  Allow SubclassName->new as alias for memcached_create.
+  Deprecated perl-specific functions superceeded by methods:
+    memcached_errstr                - now $memc->errstr
+    memcached_mget_into_hashref     - now $memc->mget_into_hashref
+    memcached_set_callback_coderefs - now $memc->set_callback_coderefs
+  Added -g/-pg options to Makefile.PL to enable debug/profiling.
+  Changed memcache object to be blessed hash instead of blessed int.
 
 =head2 Changes in 0.1404 (svn r106) 29th Jan 2008
 
