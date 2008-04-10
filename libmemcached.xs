@@ -87,7 +87,6 @@ struct lmc_state_st {
     lmc_cb_context_st _cb_context;
 };
 
-
 static lmc_state_st *
 lmc_state_new(memcached_st *ptr, HV *memc_hv)
 {
@@ -841,3 +840,71 @@ set_callback_coderefs(Memcached__libmemcached ptr, SV *set_cb, SV *get_cb)
         lmc_state = LMC_STATE_FROM_PTR(ptr);
         sv_setsv(lmc_state->cb_context->set_cb, set_cb);
         sv_setsv(lmc_state->cb_context->get_cb, get_cb);
+
+
+memcached_return
+walk_stats(Memcached__libmemcached ptr, char *stats_args, CV *cb)
+    PREINIT:
+        lmc_state_st *lmc_state;
+        memcached_return rc;
+        memcached_stat_st *stat;
+    CODE:
+        lmc_state = LMC_STATE_FROM_PTR(ptr);
+        size_t i;
+        memcached_server_st *servers = memcached_server_list(ptr);
+        size_t server_count          = memcached_server_count(ptr);
+        SV *stats_args_sv = sv_2mortal(newSVpv(stats_args, 0));
+
+        stat = memcached_stat(ptr, stats_args, &RETVAL);
+        if (!stat || !LMC_RETURN_OK(RETVAL)) {
+            if (lmc_state->trace_level >= 2)
+                warn("memcached_stat returned stat %p rc %d\n", stat, rc);
+            LMC_RECORD_RETURN_ERR(ptr, RETVAL);
+            XSRETURN_NO;
+        }
+
+        for (i = 0; i < server_count; i++) {
+            SV *hostport_sv;
+            char **keys;
+            char *val;
+
+            hostport_sv = sv_2mortal(newSVpvf("%s:%d",
+                memcached_server_name(ptr, servers[i]),
+                memcached_server_port(ptr, servers[i])
+            ));
+
+            keys = memcached_stat_get_keys(ptr, &stat[i], &rc);
+            while (keys && *keys) {
+                int items;
+                dSP;
+                val = memcached_stat_get_value(ptr, stat, *keys, &rc);
+                if (! val) {
+                    continue;
+                }
+
+                ENTER;
+                SAVETMPS;
+
+                /* callback is called with key, value, hostname, typename */
+                PUSHMARK(SP);
+                XPUSHs(sv_2mortal(newSVpv(*keys, 0)));
+                XPUSHs(sv_2mortal(newSVpv(val, 0)));
+                XPUSHs(hostport_sv);
+                XPUSHs(stats_args_sv);
+                PUTBACK;
+
+                items = call_sv((SV*)cb, G_ARRAY);
+                SPAGAIN;
+
+                if (items) /* XXX may use returned items for signalling later */
+                    croak("walk_stats callback returned non-empty list");
+
+                FREETMPS;
+                LEAVE;
+
+                keys++;
+            }
+        }
+    OUTPUT:
+    RETVAL
+

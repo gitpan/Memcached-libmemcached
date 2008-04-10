@@ -9,11 +9,11 @@ Memcached::libmemcached - Thin fast full interface to the libmemcached client AP
 
 =head1 VERSION
 
-Version 0.1601 (with libmemcached-0.16 embedded)
+Version 0.1901 (with libmemcached-0.19 embedded)
 
 =cut
 
-our $VERSION = '0.1701';
+our $VERSION = '0.1901';
 
 use Carp;
 use base qw(Exporter);
@@ -567,13 +567,13 @@ Use L</memcached_mget_by_key> directly if you need that feature.
 
 Effectively the same as:
 
-  $vaue = memcached_get( $memc, $key );
+  $value = memcached_get( $memc, $key );
 
 The C<get> method also supports the L<Cache::Memcached> feature where $key can
 be a reference to an array [ $master_key, $key ]. In which case the call is
 effectively the same as:
 
-  $vaue = memcached_get_by_key( $memc, $key->[0], $key->[1] )
+  $value = memcached_get_by_key( $memc, $key->[0], $key->[1] )
 
 
 =head3 set_callback_coderefs
@@ -581,7 +581,7 @@ effectively the same as:
   $memc->set_callback_coderefs(\&set_callback, \&get_callback);
 
 This interface is I<experimental> and I<likely to change>. (It's also currently
-used by Cache::libmemcached, so don't use it if you're using that module.)
+used by Cache::Memcached::libmemcached, so don't use it if you're using that module.)
 
 Specify functions which will be executed when values are set and/or get using $memc. 
 
@@ -594,10 +594,25 @@ This method is also currently callable as memcached_set_callback_coderefs() for
 compatibility with an earlier version, but that deprecated alias will start
 warning and then cease to exist in future versions.
 
-=head2 Reference
+=head3 walk_stats
 
-The $memc variable 
+  $memc->walk_stats( $stats_args, \&my_stats_callback );
 
+This interface is I<experimental> and I<likely to change>.
+
+Calls the memcached_stat() function to issue a "STAT $stats_args" command to
+the connected memcached servers. The $stats_args argument is usually an empty string.
+
+The callback function is called for each return value from each server.
+The callback will be passed 4 parameters:
+
+  sub my_stats_callback {
+    my ($key, $value, $hostport, $stats_args) = @_;
+    # Do what you like with the above!
+    return;
+  }
+
+Currently the callback I<must> return an empty list.
 
 =head1 EXTRA INFORMATION
 
