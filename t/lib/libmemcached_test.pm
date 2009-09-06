@@ -16,11 +16,13 @@ our @EXPORT = qw(
 );
 
 use Memcached::libmemcached qw(
+    memcached_behavior_set
     memcached_create
-    memcached_server_add
-    memcached_get
     memcached_errstr
+    memcached_get
+    memcached_server_add
     memcached_version
+    MEMCACHED_BEHAVIOR_BINARY_PROTOCOL
 );
 
 
@@ -39,6 +41,10 @@ sub libmemcached_test_create {
     my $memc = memcached_create()
         or die "memcached_create failed";
 
+    if ($ENV{LIBMEMCACHED_BINARY_PROTOCOL}) {
+        memcached_behavior_set($memc, MEMCACHED_BEHAVIOR_BINARY_PROTOCOL, 1 );
+    }
+
     # XXX would be good to filter this list by those we can communicate with
     # (and have sufficient version number)
     # then pick the first of those to use as the default test server
@@ -53,7 +59,7 @@ sub libmemcached_test_create {
     # XXX ideally this should be a much 'simpler/safer' command
     memcached_get($memc, "foo");
     plan skip_all => "Can't talk to any memcached servers"
-        if memcached_errstr($memc) !~ /SUCCESS|NOT FOUND/;
+        if memcached_errstr($memc) !~ /SUCCESS|NOT FOUND|SERVER END/;
 
     plan skip_all => "memcached server version less than $args->{min_version}"
         if $args->{min_version}
@@ -65,13 +71,18 @@ sub libmemcached_test_create {
 
 sub libmemcached_version_ge {
     my ($memc, $min_version) = @_;
-    my @min_version = split /\./, $min_version;
+    my $numify = sub {
+        my $version = shift;
+        my @version = split /\./, $version;
+        return $version[0] + $version[1] / 100 + $version[2] / 100_000;
+    };
 
     my @memcached_version = memcached_version($memc);
 
-    for (0,1,2) {
-        return 1 if $memcached_version[$_] > $min_version[$_];
-        return 0 if $memcached_version[$_] < $min_version[$_];
+    $min_version = $numify->( $min_version );
+    foreach my $version (map { $numify->($_) } @memcached_version) {
+        return 1 if $version >= $min_version;
+        return 0 if $version <  $min_version;
     }
     return 1; # identical versions
 }

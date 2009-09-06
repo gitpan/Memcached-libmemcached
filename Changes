@@ -2,7 +2,13 @@
 
 Memcached::libmemcached::Changes - List of significant changes
 
-As of $Date: 2008-01-08 15:54:15 +0000 (Tue, 08 Jan 2008) $ $Revision: 56449 $
+=head2 Changes in 0.3101 6th Sep 2009
+
+  Sync with libmemcached 0.31
+  Now tested against memcached 1.4.1
+  Now tested with binary protocol
+  Work with newer libmemcached, which returned MEMCACHED_END instead of
+    MEMCACHED_SUCCESS on fetch success
 
 =head2 Changes in 0.2101 (svn r156) 27th May 2008
 

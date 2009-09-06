@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Memcached-libmemcached
-version:            0.2501
+version:            0.3101
 abstract:           Thin fast full interface to the libmemcached client API
 author:
     - Tim Bunce <Tim.Bunce@pobox.com>
@@ -8,13 +8,15 @@ license:            unknown
 distribution_type:  module
 configure_requires:
     ExtUtils::MakeMaker:  0
+build_requires:
+    ExtUtils::MakeMaker:  0
 requires:
     Test::More:  0
 no_index:
     directory:
         - t
         - inc
-generated_by:       ExtUtils::MakeMaker version 6.48
+generated_by:       ExtUtils::MakeMaker version 6.54
 meta-spec:
     url:      http://module-build.sourceforge.net/META-spec-v1.4.html
     version:  1.4

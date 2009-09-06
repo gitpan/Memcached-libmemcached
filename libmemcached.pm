@@ -13,7 +13,7 @@ Version 0.2501 (with libmemcached-0.25 embedded)
 
 =cut
 
-our $VERSION = '0.2501';
+our $VERSION = '0.3101';
 
 use Carp;
 use base qw(Exporter);
@@ -401,10 +401,9 @@ version (version of the client library, not server).
 =head2 memcached_version
 
   $version = memcached_version($memc)
-  ($major, $minor, $micro) = memcached_version($memc)
+  ($version1, $version2, $version3) = memcached_version($memc)
 
-Returns the version of the first memcached server (in the list associated with
-$memc) to respond to the version request.
+Returns the version of all memcached servers to respond to the version request.
 
 In scalar context returns a simple version string, like "1.2.3".
 In list context returns the individual version component numbers.
@@ -652,11 +651,15 @@ Use L</mget_into_hashref> instead.
 
 Use L</set_callback_coderefs> instead.
 
-=head1 AUTHOR
+=head1 AUTHOR EMERITUS
 
 Tim Bunce, C<< <Tim.Bunce@pobox.com> >> with help from Patrick Galbraith and Daisuke Maki.
 
 L<http://www.tim.bunce.name>
+
+=head1 CURRENT MAINTAINER
+
+Daisuke Maki C<< <daisuke@endeworks.jp> >>
 
 =head1 ACKNOWLEDGEMENTS
 

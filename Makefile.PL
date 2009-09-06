@@ -16,19 +16,19 @@ BEGIN {
     }
 }
 
-
+my $lmcd_src = "src/libmemcached";
 GetOptions(
     'g!'    => \my $opt_g,      # enable debugging
     'pg!'   => \my $opt_pg,     # enable profiling
     'cov!'  => \my $opt_cov,    # enable test coverage analysis
     'bin!'  => \my $opt_bin,    # install bintools from libmemcached
+    'src=s' => \$lmcd_src,     # unpacked source code for libmemcached
 ) or exit 1;
 
-my $lmcd_src = "src/libmemcached";
 my $lmcd_inst = getcwd()."/src_inst";
 my $lmcd_built_lib = "$lmcd_inst/lib/libmemcached$Config{lib_ext}";
 my @lmcd_pod = sort <$lmcd_src/docs/memcached_*.pod>;
-my $is_developer = (-d ".svn");
+my $is_developer = (-d ".svn" || -d ".git");
 
 my ($lmcd_h) = eval { build_libmemcached() };
 if ($@) {
@@ -264,14 +264,20 @@ sub extract_libmemcached_constants {
                     $in_enum = 0;
                 }
                 elsif (m/^ \s* (MEMCACHED_\w+)/x) {
-                    push @const, $1;
+                    my $symbol = $1;
+                    if ( $symbol !~ /MEMCACHED_CALLBACK_(MALLOC|REALLOC|FREE)_FUNCTION/) {
+                        push @const, $symbol;
+                    }
                 }
             }
             elsif (m/^ \s* typedef \s+ enum /x) {
                 $in_enum = 1;
             }
             elsif (m/\# \s* define \s+ (MEMCACHED_\w+)/x) {
-                $libmemcached_const{$1} = "defines";
+                my $symbol = $1;
+                if ($symbol !~ /_H$/) {
+                    $libmemcached_const{$1} = "defines";
+                }
             }
         }
     }
@@ -338,6 +344,6 @@ sub extract_libmemcached_constants {
     # close up
     print $const_pm_fh "=cut\n\n1;\n";
     close $const_pm_fh or die "Error closing $const_pm: $!";
-    run("svn add -q $const_pm") if $is_developer;
+#    run("svn add -q $const_pm") if $is_developer;
 }
 

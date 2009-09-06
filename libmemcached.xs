@@ -346,8 +346,10 @@ _fetch_one_sv(memcached_st *ptr, lmc_data_flags_t *flags_ptr, memcached_return *
 
     *error_ptr = memcached_fetch_execute(ptr, callbacks, lmc_cb_context, callback_ix);
 
-    if (lmc_cb_context->result_count == 0 && *error_ptr == MEMCACHED_SUCCESS)
+    if (lmc_cb_context->result_count == 0 && (*error_ptr == MEMCACHED_SUCCESS || *error_ptr == MEMCACHED_END))
         *error_ptr = MEMCACHED_NOTFOUND; /* to match memcached_get behaviour */
+    else if (lmc_cb_context->result_count > 0 && *error_ptr == MEMCACHED_END)
+        *error_ptr = MEMCACHED_SUCCESS; /* to match memcached_get behaviour */
 
     return lmc_cb_context->dest_sv;
 }
@@ -383,8 +385,11 @@ _fetch_all_into_hashref(memcached_st *ptr, memcached_return rc, HV *dest_ref)
         }
         return rc;
     }
-
-    return memcached_fetch_execute(ptr, callbacks, (void *)lmc_cb_context, callback_ix);
+    rc = memcached_fetch_execute(ptr, callbacks, (void *)lmc_cb_context, callback_ix);
+    if (rc == MEMCACHED_NOTFOUND || rc == MEMCACHED_SUCCESS) {
+        return MEMCACHED_SUCCESS; /* This is a success, no matter what */
+    }
+    return rc;
 }
 
 
@@ -698,33 +703,47 @@ memcached_lib_version()
 
 void
 memcached_version(Memcached__libmemcached ptr)
+    PREINIT:
+        memcached_stat_st *stat;
+        memcached_return  rc;
+        lmc_state_st* lmc_state;
+        int i;
+        size_t server_count;
     PPCODE:
-        /* memcached_version updates ptr->hosts[x].*_version for each
-         * associated memcached server that responds to the request.
-         */
-        /* XXX assumes first entry in list of hosts responded
-         * XXX should scan to find first non-all-zero
-         * and that any other memcached servers have the same version
-         */
-        memcached_server_st *host = &ptr->hosts[0];
-        if (memcached_version(ptr) != MEMCACHED_SUCCESS)
-            XSRETURN_EMPTY;
-        if (GIMME_V == G_ARRAY) {
-            mXPUSHi(host->major_version);
-            mXPUSHi(host->minor_version);
-            mXPUSHi(host->micro_version);
-            XSRETURN(3);
+        server_count = memcached_server_count(ptr);
+        lmc_state = LMC_STATE_FROM_PTR(ptr);
+        stat = memcached_stat(ptr, NULL, &rc);
+        if (!stat || !LMC_RETURN_OK(rc)) {
+            if (lmc_state->trace_level >= 2)
+                warn("memcached_stat returned stat %p rc %d\n", stat, rc);
+            LMC_RECORD_RETURN_ERR(ptr, rc);
+            XSRETURN_NO;
         }
-        else {
-            SV *version_sv = sv_newmortal();
-            sv_setpvf(version_sv, "%d.%d.%d",
-                host->major_version,
-                host->minor_version,
-                host->micro_version
-            );
-            XPUSHs(version_sv);
-            XSRETURN(1);
+
+        for (i = 0; i < server_count; i++) {
+            char **keys;
+            char *val;
+
+            keys = memcached_stat_get_keys(ptr, &stat[i], &rc);
+            while (keys && *keys) {
+                SV *version_sv;
+                val = memcached_stat_get_value(ptr, stat, *keys, &rc);
+                if (! val) {
+                    keys++;
+                    continue;
+                }
+
+                if ( strNE(*keys, "version") ) {
+                    keys++;
+                    continue;
+                }
+                version_sv = sv_newmortal();
+                sv_setpvf(version_sv, "%s", val);
+                XPUSHs(version_sv);
+                keys++;
+            }
         }
+        XSRETURN(1);
 
 
 =head2 Memcached::libmemcached Methods
@@ -849,18 +868,30 @@ walk_stats(Memcached__libmemcached ptr, char *stats_args, CV *cb)
         lmc_state_st *lmc_state;
         memcached_return rc;
         memcached_stat_st *stat;
-    CODE:
-        lmc_state = LMC_STATE_FROM_PTR(ptr);
         size_t i;
-        memcached_server_st *servers = memcached_server_list(ptr);
-        size_t server_count          = memcached_server_count(ptr);
-        SV *stats_args_sv = sv_2mortal(newSVpv(stats_args, 0));
+        memcached_server_st *servers;
+        size_t server_count;
+        SV *stats_args_sv;
+        Memcached__libmemcached clone;
+    CODE:
+        clone = memcached_create(NULL);
+        memcached_clone(clone, ptr);
+        memcached_behavior_set(clone, MEMCACHED_BEHAVIOR_BINARY_PROTOCOL, 0);
 
-        stat = memcached_stat(ptr, stats_args, &RETVAL);
+        lmc_state     = LMC_STATE_FROM_PTR(ptr);
+        servers       = memcached_server_list(ptr);
+        server_count  = memcached_server_count(ptr);
+        for(i = 0; i < server_count; i++) {
+            memcached_server_add(clone, servers[i].hostname, servers[i].port);
+        }
+
+        stats_args_sv = sv_2mortal(newSVpv(stats_args, 0));
+
+        stat = memcached_stat(clone, stats_args, &RETVAL);
         if (!stat || !LMC_RETURN_OK(RETVAL)) {
             if (lmc_state->trace_level >= 2)
                 warn("memcached_stat returned stat %p rc %d\n", stat, rc);
-            LMC_RECORD_RETURN_ERR(ptr, RETVAL);
+            LMC_RECORD_RETURN_ERR(clone, RETVAL);
             XSRETURN_NO;
         }
 
@@ -870,15 +901,15 @@ walk_stats(Memcached__libmemcached ptr, char *stats_args, CV *cb)
             char *val;
 
             hostport_sv = sv_2mortal(newSVpvf("%s:%d",
-                memcached_server_name(ptr, servers[i]),
-                memcached_server_port(ptr, servers[i])
+                memcached_server_name(clone, servers[i]),
+                memcached_server_port(clone, servers[i])
             ));
 
-            keys = memcached_stat_get_keys(ptr, &stat[i], &rc);
+            keys = memcached_stat_get_keys(clone, &stat[i], &rc);
             while (keys && *keys) {
                 int items;
                 dSP;
-                val = memcached_stat_get_value(ptr, stat, *keys, &rc);
+                val = memcached_stat_get_value(clone, stat, *keys, &rc);
                 if (! val) {
                     continue;
                 }
@@ -905,7 +936,10 @@ walk_stats(Memcached__libmemcached ptr, char *stats_args, CV *cb)
 
                 keys++;
             }
+            memcached_stat_free(clone, stat);
+
         }
+        memcached_free(clone);
     OUTPUT:
-    RETVAL
+        RETVAL
 
