@@ -2,6 +2,11 @@
 
 Memcached::libmemcached::Changes - List of significant changes
 
+=head2 Changes in 0.3102 6th Sep 2009
+
+  Fix walk_stats() in some corner cases
+  Fix documentation (just the version)
+
 =head2 Changes in 0.3101 6th Sep 2009
 
   Sync with libmemcached 0.31

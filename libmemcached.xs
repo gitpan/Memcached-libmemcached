@@ -891,7 +891,7 @@ walk_stats(Memcached__libmemcached ptr, char *stats_args, CV *cb)
         if (!stat || !LMC_RETURN_OK(RETVAL)) {
             if (lmc_state->trace_level >= 2)
                 warn("memcached_stat returned stat %p rc %d\n", stat, rc);
-            LMC_RECORD_RETURN_ERR(clone, RETVAL);
+            LMC_RECORD_RETURN_ERR(ptr, RETVAL);
             XSRETURN_NO;
         }
 
