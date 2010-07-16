@@ -1,11 +1,14 @@
-/*
- * Summary: interface for memcached server
- * Description: visibitliy macros for libmemcached
+/* LibMemcached
+ * Copyright (C) 2006-2009 Brian Aker 
+ * All rights reserved.
  *
  * Use and distribution licensed under the BSD license.  See
- * the COPYING file in this directory for full text.
- * 
- * Author: Monty Taylor
+ * the COPYING file in the parent directory for full text.
+ *
+ * Summary: Interface for memcached server.
+ *
+ * Author: Trond Norbye
+ *
  */
 
 /**
@@ -13,8 +16,8 @@
  * @brief Visibility control macros
  */
 
-#ifndef __LIBMEMCACHED_VISIBILITY_H
-#define __LIBMEMCACHED_VISIBILITY_H
+#ifndef __LIBMEMCACHED_VISIBILITY_H__
+#define __LIBMEMCACHED_VISIBILITY_H__
 
 /**
  *
@@ -34,6 +37,9 @@
 # elif defined(_MSC_VER)
 #  define LIBMEMCACHED_API extern __declspec(dllexport) 
 #  define LIBMEMCACHED_LOCAL
+# else
+#  define LIBMEMCACHED_API
+#  define LIBMEMCACHED_LOCAL
 # endif /* defined(HAVE_VISIBILITY) */
 #else  /* defined(BUILDING_LIBMEMCACHED) */
 # if defined(_MSC_VER)
@@ -45,4 +51,4 @@
 # endif /* defined(_MSC_VER) */
 #endif /* defined(BUILDING_LIBMEMCACHED) */
 
-#endif /* __LIBMEMCACHED_VISIBILITY_H */
+#endif /* __LIBMEMCACHED_VISIBILITY_H__ */

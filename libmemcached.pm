@@ -9,11 +9,11 @@ Memcached::libmemcached - Thin fast full interface to the libmemcached client AP
 
 =head1 VERSION
 
-Version 0.3102 (with libmemcached-0.31 embedded)
+Version 0.4201 (with libmemcached-0.42 embedded)
 
 =cut
 
-our $VERSION = '0.3102';
+our $VERSION = '0.4201';
 
 use Carp;
 use base qw(Exporter);
@@ -559,7 +559,7 @@ Cache::Memcached compatible API with maximum efficiency.
 Note, however, that C<get_multi> does I<not> support the L<Cache::Memcached>
 feature where a key can be a reference to an array [ $master_key, $key ].
 Use L</memcached_mget_by_key> directly if you need that feature.
-  
+
 =head3 get
 
   $value = $memc->get( $key );

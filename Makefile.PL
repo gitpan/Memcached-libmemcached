@@ -63,7 +63,7 @@ if ($opt_cov) {
 ### optionally install the command line utilities that come with
 ### libmemcached as well
 if( $opt_bin ) {
-    $opts{EXE_FILES} = [ map { s/\.c$//i; $_ } <src/libmemcached/clients/mem*.c> ]; 
+    $opts{EXE_FILES} = [ map { s/\.c$//i; $_ } <src/libmemcached/clients/mem*.c> ];
 }
 
 WriteMakefile(
@@ -130,7 +130,7 @@ libmemcached.c : $(XSUBPPDIR)/ParseXS.pm typemap
 $(OBJECT) : $(LMCD_BUILT_LIB)
 
 svnmanifest::
-	svn list -R .@HEAD | sort | grep -v '/$$' > MANIFEST
+	svn list -R -r HEAD | sort |grep -v '/$$' > MANIFEST
 	svn diff MANIFEST
 	svn status
 
@@ -179,7 +179,7 @@ sub build_libmemcached {
     return if -d "$lmcd_inst/lib"; # XXX assume it built ok. use 'make realclean' to rm
     mkdir $lmcd_inst, 0775 unless -d $lmcd_inst;
     run("cd $lmcd_src && make distclean") if -f "$lmcd_src/Makefile";
-    my $configure_args = '--with-pic'; #'--disable-shared';
+    my $configure_args = '--disable-sasl --with-pic --disable-shared';
     $configure_args .= ' --enable-debug' if $opt_g;
     $configure_args .= ' CFLAGS=-pg LDFLAGS=-pg' if $opt_pg;
     if ($is_developer) {    # XXX make a Makefile.PL argument/option
@@ -253,7 +253,8 @@ sub extract_libmemcached_constants {
     my $in_enum = 0;
     my @const;
 
-    my @headers = glob "$lmcd_src/libmemcached/memcached*.h";
+    my @headers = ("$lmcd_src/libmemcached/memcached.h", 
+                   "$lmcd_src/libmemcached/constants.h");
     for my $h (@headers) {
         open my $fh, "<$h" or die "Can't open $h: $!";
         while (<$fh>) {

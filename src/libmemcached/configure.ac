@@ -1,4 +1,5 @@
-# libmemcached 
+#!/usr/bin/env bash
+# libmemcached
 # Copyright (C) 2008 Brian Aker, Monty Taylor
 # All rights reserved.
 #
@@ -6,16 +7,16 @@
 # the COPYING file in this directory for full text.
 
 AC_PREREQ(2.59)
-AC_INIT([libmemcached],[0.31],[http://tangent.org/552/libmemcached.html])
+AC_INIT([libmemcached],[0.42],[http://libmemcached.org/])
 AC_CONFIG_SRCDIR([libmemcached/memcached.c])
 AC_CONFIG_AUX_DIR(config)
-AM_CONFIG_HEADER([config.h])
-AC_CONFIG_MACRO_DIR([m4])
 
 PANDORA_CANONICAL_TARGET
 
 #shared library versioning
-MEMCACHED_LIBRARY_VERSION=2:0:0
+MEMCACHED_UTIL_LIBRARY_VERSION=1:0:0
+MEMCACHED_PROTOCAL_LIBRARY_VERSION=0:0:0
+MEMCACHED_LIBRARY_VERSION=5:1:0
 #                         | | |
 #                  +------+ | +---+
 #                  |        |     |
@@ -26,50 +27,23 @@ MEMCACHED_LIBRARY_VERSION=2:0:0
 #                  |        +- increment if source code has changed
 #                  |           set to zero if current is incremented
 #                  +- increment if interfaces have been added, removed or changed
+AC_SUBST(MEMCACHED_UTIL_LIBRARY_VERSION)
+AC_SUBST(MEMCACHED_PROTOCAL_LIBRARY_VERSION)
 AC_SUBST(MEMCACHED_LIBRARY_VERSION)
-MEMCACHEDUTIL_LIBRARY_VERSION=0:0:0
-AC_SUBST(MEMCACHEDUTIL_LIBRARY_VERSION)
 
 
-# libmemcached versioning when linked with GNU ld.
-if test "$lt_cv_prog_gnu_ld" = "yes"
-then
-    LD_VERSION_SCRIPT="-Wl,--version-script=\$(top_srcdir)/libmemcached/libmemcached.ver"
-    LD_UTIL_VERSION_SCRIPT="-Wl,--version-script=\$(top_srcdir)/libmemcachedutil/libmemcachedutil.ver"
-fi
-AC_SUBST(LD_VERSION_SCRIPT)
-AC_SUBST(LD_UTIL_VERSION_SCRIPT)
-
-
-#--------------------------------------------------------------------
-# Check for libpthread
-#--------------------------------------------------------------------
-
-ACX_PTHREAD(,AC_MSG_ERROR(could not find libpthread))
-LIBS="${PTHREAD_LIBS} ${LIBS}"
-CFLAGS="${PTHREAD_CFLAGS} ${CFLAGS}"
-CC="$PTHREAD_CC"
-
+HASHKIT_LIBRARY_VERSION=0:0:0
+AC_SUBST(HASHKIT_LIBRARY_VERSION)
 
 AC_SEARCH_LIBS(getopt_long, gnugetopt)
-AC_SEARCH_LIBS(socket, socket)
 AC_SEARCH_LIBS(gethostbyname, nsl)
 
-save_LIBS="$LIBS"
-LIBS="$LIBS -lm"
-AC_LINK_IFELSE(
-  [AC_LANG_PROGRAM(
-    [[
-#include <stdlib.h>
-    ]],[[
-      float f= floorf((float) 1.0);
-    ]],
-    [LIBM="-lm"],[LIBM=""])])
-    
-AC_SUBST(LIBM)
-LIBS="$save_LIBS"
+AC_CHECK_FUNCS([getline])
 
-AC_SEARCH_LIBS(floorf, m)
+PANDORA_HAVE_LIBGTEST
+PANDORA_HAVE_LIBEVENT
+PANDORA_REQUIRE_PTHREAD
+PANDORA_CXX_DEMANGLE
 
 dnl Specialty checks
 DETECT_BYTEORDER
@@ -77,20 +51,33 @@ ENABLE_UTILLIB
 SETSOCKOPT_SANITY
 ENABLE_HSIEH_HASH
 REQUIRE_POD2MAN
+REQUIRE_PODCHECKER
 PROTOCOL_BINARY_TEST
 WITH_MEMCACHED
 ENABLE_DEPRECATED
+PANDORA_HAVE_LIBINNODB
+PANDORA_PRINT_CALLSTACK
+PANDORA_HAVE_SASL
 
+dnl The sasl functions should only be visible if we build with sasl support
+AS_IF([test "x$ac_cv_sasl" = "xyes"],
+      [LIBMEMCACHED_WITH_SASL_SUPPORT="#define LIBMEMCACHED_WITH_SASL_SUPPORT 1"])
+AC_SUBST(LIBMEMCACHED_WITH_SASL_SUPPORT)
+
+AC_CHECK_HEADERS([atomic.h])
+AS_IF([test "x$ac_cv_header_atomic_h" = "xyes"],[
+      AC_CHECK_FUNCS(atomic_add_64)
+      AC_CHECK_FUNCS(atomic_add_32)
+      AS_IF([test "x$ac_cv_func_atomic_add_64" = "xyes" -a "x$ac_cv_func_atomic_add_32" = "xyes"],[
+            AC_DEFINE([USE_ATOMIC_H],
+	              [1],
+                      [Define to true if you want to use functions from atomic.h])])])
 
 AC_CONFIG_FILES([
   Makefile
-  clients/Makefile
-  tests/Makefile
   docs/Makefile
-  libmemcached/Makefile
-  libmemcached/memcached_configure.h
-  libmemcachedutil/Makefile
-  support/Makefile
+  libhashkit/configure.h
+  libmemcached/configure.h
   support/libmemcached.pc
   support/libmemcached.spec
   support/libmemcached-fc.spec
@@ -109,4 +96,16 @@ echo "   * Debug enabled:             $with_debug"
 echo "   * Warnings as failure:       $ac_cv_warnings_as_errors"
 echo ""
 echo "---"
+
+case "$host_os" in
+  *freebsd*)
+    echo "*****"
+    echo "*"
+    echo "*  NOTE: You are on FreeBSD. BSD make will not work."
+    echo "*"
+    echo "*   use 'gmake' To build libmemcached"
+    echo "*"
+    echo "*****"
+  ;;
+esac
 

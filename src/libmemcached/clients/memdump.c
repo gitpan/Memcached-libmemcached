@@ -1,4 +1,16 @@
-#include "libmemcached/common.h"
+/* LibMemcached
+ * Copyright (C) 2006-2009 Brian Aker
+ * All rights reserved.
+ *
+ * Use and distribution licensed under the BSD license.  See
+ * the COPYING file in the parent directory for full text.
+ *
+ * Summary:
+ *
+ */
+
+#include "config.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
@@ -21,17 +33,19 @@
 #define PROGRAM_DESCRIPTION "Dump all values from one or many servers."
 
 /* Prototypes */
-void options_parse(int argc, char *argv[]);
+static void options_parse(int argc, char *argv[]);
 
 static int opt_binary=0;
 static int opt_verbose= 0;
 static char *opt_servers= NULL;
 static char *opt_hash= NULL;
+static char *opt_username;
+static char *opt_passwd;
 
 /* Print the keys and counter how many were found */
-static memcached_return key_printer(memcached_st *ptr __attribute__((unused)),  
-                                              const char *key, size_t key_length, 
-                                              void *context __attribute__((unused)))
+static memcached_return_t key_printer(const memcached_st *ptr __attribute__((unused)),
+                                      const char *key, size_t key_length,
+                                      void *context __attribute__((unused)))
 {
   printf("%.*s\n", (uint32_t)key_length, key);
 
@@ -41,9 +55,9 @@ static memcached_return key_printer(memcached_st *ptr __attribute__((unused)),
 int main(int argc, char *argv[])
 {
   memcached_st *memc;
-  memcached_return rc;
+  memcached_return_t rc;
   memcached_server_st *servers;
-  memcached_dump_func callbacks[1];
+  memcached_dump_fn callbacks[1];
 
   callbacks[0]= &key_printer;
 
@@ -74,6 +88,11 @@ int main(int argc, char *argv[])
   memcached_server_list_free(servers);
   memcached_behavior_set(memc, MEMCACHED_BEHAVIOR_BINARY_PROTOCOL,
                          (uint64_t)opt_binary);
+  if (!initialize_sasl(memc, opt_username, opt_passwd))
+  {
+    memcached_free(memc);
+    return 1;
+  }
 
   rc= memcached_dump(memc, callbacks, NULL, 1);
 
@@ -92,27 +111,31 @@ int main(int argc, char *argv[])
   if (opt_hash)
     free(opt_hash);
 
+  shutdown_sasl();
+
   return 0;
 }
 
-void options_parse(int argc, char *argv[])
+static void options_parse(int argc, char *argv[])
 {
   int option_index= 0;
   int option_rv;
 
   static struct option long_options[]=
     {
-      {"version", no_argument, NULL, OPT_VERSION},
-      {"help", no_argument, NULL, OPT_HELP},
-      {"verbose", no_argument, &opt_verbose, OPT_VERBOSE},
-      {"debug", no_argument, &opt_verbose, OPT_DEBUG},
-      {"servers", required_argument, NULL, OPT_SERVERS},
-      {"hash", required_argument, NULL, OPT_HASH},
-      {"binary", no_argument, NULL, OPT_BINARY},
+      {(OPTIONSTRING)"version", no_argument, NULL, OPT_VERSION},
+      {(OPTIONSTRING)"help", no_argument, NULL, OPT_HELP},
+      {(OPTIONSTRING)"verbose", no_argument, &opt_verbose, OPT_VERBOSE},
+      {(OPTIONSTRING)"debug", no_argument, &opt_verbose, OPT_DEBUG},
+      {(OPTIONSTRING)"servers", required_argument, NULL, OPT_SERVERS},
+      {(OPTIONSTRING)"hash", required_argument, NULL, OPT_HASH},
+      {(OPTIONSTRING)"binary", no_argument, NULL, OPT_BINARY},
+      {(OPTIONSTRING)"username", required_argument, NULL, OPT_USERNAME},
+      {(OPTIONSTRING)"password", required_argument, NULL, OPT_PASSWD},
       {0, 0, 0, 0}
     };
 
-  while (1) 
+  while (1)
   {
     option_rv= getopt_long(argc, argv, "Vhvds:", long_options, &option_index);
 
@@ -143,6 +166,12 @@ void options_parse(int argc, char *argv[])
     case OPT_HASH:
       opt_hash= strdup(optarg);
       break;
+    case OPT_USERNAME:
+       opt_username= optarg;
+       break;
+    case OPT_PASSWD:
+       opt_passwd= optarg;
+       break;
     case '?':
       /* getopt_long already printed an error message. */
       exit(1);

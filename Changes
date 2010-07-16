@@ -2,10 +2,14 @@
 
 Memcached::libmemcached::Changes - List of significant changes
 
-=head2 Changes in 0.3102 6th Sep 2009
 
-  Fix walk_stats() in some corner cases
-  Fix documentation (just the version)
+=head2 Changes in 0.4201 (svn r163) 17th Dec 2008
+
+  Sync with libmemcached 0.42
+  Squashed various compile warnings
+  Many updates to libmemcached API calls due to API changes
+  Merged existing svn tree (which was out of sync) with 
+  Daisuke's tree
 
 =head2 Changes in 0.3101 6th Sep 2009
 
@@ -14,6 +18,10 @@ Memcached::libmemcached::Changes - List of significant changes
   Now tested with binary protocol
   Work with newer libmemcached, which returned MEMCACHED_END instead of
     MEMCACHED_SUCCESS on fetch success
+
+=head2 Changes in 0.2501 (svn r163) 17th Dec 2008
+
+  Sync with libmemcached 0.25.
 
 =head2 Changes in 0.2101 (svn r156) 27th May 2008
 
