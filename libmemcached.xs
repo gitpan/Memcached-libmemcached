@@ -14,6 +14,8 @@
 #define MEMCACHED_CALLBACK_REALLOC_FUNCTION 5
 #define MEMCACHED_CALLBACK_FREE_FUNCTION 6
 
+/* See also the typemap as most of the interesting glue is there */
+
 /* mapping C types to perl classes - keep typemap file in sync */
 typedef memcached_st*        Memcached__libmemcached;
 typedef uint32_t             lmc_data_flags_t;
@@ -49,11 +51,18 @@ typedef time_t               lmc_expiration;
     (ret==MEMCACHED_SUCCESS || ret==MEMCACHED_STORED || ret==MEMCACHED_DELETED || ret==MEMCACHED_END || ret==MEMCACHED_BUFFERED)
 
 /* store memcached_return value in our lmc_state structure */
-#define LMC_RECORD_RETURN_ERR(ptr, ret) \
+#define LMC_RECORD_RETURN_ERR(what, ptr, ret) \
     STMT_START {    \
         lmc_state_st* lmc_state = LMC_STATE_FROM_PTR(ptr); \
-        lmc_state->last_return = ret;   \
-        lmc_state->last_errno  = ptr->cached_errno; /* if MEMCACHED_ERRNO */ \
+        if (lmc_state) { \
+            if (lmc_state->trace_level > 1 || (lmc_state->trace_level && !LMC_RETURN_OK(ret))) \
+                warn("\t<= %s return %d %s", what, ret, memcached_strerror(ptr, ret)); \
+            lmc_state->last_return = ret;   \
+            lmc_state->last_errno  = ptr->cached_errno; /* if MEMCACHED_ERRNO */ \
+        } else { /* should never happen */ \
+            warn("LMC_RECORD_RETURN_ERR(%d %s): no lmc_state structure in memcached_st so error not recorded!", \
+                ret, memcached_strerror(ptr, ret)); \
+        } \
     } STMT_END
 
 
@@ -720,9 +729,7 @@ memcached_version(Memcached__libmemcached ptr)
         lmc_state = LMC_STATE_FROM_PTR(ptr);
         stat = memcached_stat(ptr, NULL, &rc);
         if (!stat || !LMC_RETURN_OK(rc)) {
-            if (lmc_state->trace_level >= 2)
-                warn("memcached_stat returned stat %p rc %d\n", stat, rc);
-            LMC_RECORD_RETURN_ERR(ptr, rc);
+            LMC_RECORD_RETURN_ERR("memcached_stat", ptr, rc);
             XSRETURN_NO;
         }
 
@@ -890,39 +897,30 @@ set_callback_coderefs(Memcached__libmemcached ptr, SV *set_cb, SV *get_cb)
 memcached_return
 walk_stats(Memcached__libmemcached ptr, char *stats_args, CV *cb)
     PREINIT:
-        lmc_state_st *lmc_state;
         memcached_return rc;
         memcached_stat_st *stat;
         size_t i;
-        memcached_server_st *servers;
         size_t server_count;
         SV *stats_args_sv;
         Memcached__libmemcached clone;
     CODE:
-        clone = memcached_create(NULL);
-        memcached_clone(clone, ptr);
+        /* TODO: rewrite this to use memcached_stat_execute() */
+
+        clone = memcached_clone(NULL, ptr);
         memcached_behavior_set(clone, MEMCACHED_BEHAVIOR_BINARY_PROTOCOL, 0);
-
-        lmc_state     = LMC_STATE_FROM_PTR(ptr);
-        servers       = memcached_server_list(ptr);
-        server_count  = memcached_server_count(ptr);
-        for(i = 0; i < server_count; i++) {
-            memcached_server_add(clone, servers[i].hostname, servers[i].port);
-        }
-
-        stats_args_sv = sv_2mortal(newSVpv(stats_args, 0));
 
         stat = memcached_stat(clone, stats_args, &RETVAL);
         if (!stat || !LMC_RETURN_OK(RETVAL)) {
-            if (lmc_state->trace_level >= 2)
-                warn("memcached_stat returned stat %p rc %d\n", stat, rc);
-            LMC_RECORD_RETURN_ERR(clone, RETVAL);
+            LMC_RECORD_RETURN_ERR("memcached_stat", clone, RETVAL);
             XSRETURN_NO;
         }
 
+        stats_args_sv = sv_2mortal(newSVpv(stats_args, 0));
+        server_count  = memcached_server_count(ptr);
         for (i = 0; i < server_count; i++) {
             SV *hostport_sv;
             char **keys;
+            char **keys_list;
             char *val;
 
             hostport_sv = sv_2mortal(newSVpvf("%s:%d",
@@ -930,7 +928,7 @@ walk_stats(Memcached__libmemcached ptr, char *stats_args, CV *cb)
                 memcached_server_port((memcached_server_instance_st)ptr)
             ));
 
-            keys = memcached_stat_get_keys(clone, &stat[i], &rc);
+            keys = keys_list = memcached_stat_get_keys(clone, &stat[i], &rc);
             while (keys && *keys) {
                 int items;
                 dSP;
@@ -961,6 +959,7 @@ walk_stats(Memcached__libmemcached ptr, char *stats_args, CV *cb)
 
                 keys++;
             }
+            free(keys_list);
             memcached_stat_free(clone, stat);
 
         }
