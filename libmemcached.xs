@@ -92,7 +92,7 @@ struct lmc_cb_context_st {
 struct lmc_state_st {
     memcached_st    *ptr;
     HV              *hv;    /* pointer back to HV (not refcntd) */
-    int              trace_level;
+    IV               trace_level;
     int              options;
     memcached_return last_return;
     int              last_errno;
@@ -114,7 +114,7 @@ lmc_state_new(memcached_st *ptr, HV *memc_hv)
     lmc_state->cb_context->set_cb = newSV(0);
     lmc_state->cb_context->get_cb = newSV(0);
     if (trace) {
-        lmc_state->trace_level = atoi(trace);
+        lmc_state->trace_level = (IV)atoi(trace);
     }
     return lmc_state;
 }
@@ -126,7 +126,7 @@ lmc_state_new(memcached_st *ptr, HV *memc_hv)
 static void
 _prep_keys_buffer(lmc_cb_context_st *lmc_cb_context, int keys_needed)
 {
-    int trace_level = lmc_cb_context->lmc_state->trace_level;
+    IV trace_level = lmc_cb_context->lmc_state->trace_level;
     if (keys_needed <= lmc_cb_context->key_alloc_count) {
         if (trace_level >= 9)
             warn("reusing keys buffer");
@@ -471,7 +471,13 @@ memcached_return
 memcached_server_add(Memcached__libmemcached ptr, char *hostname, unsigned int port=0)
 
 memcached_return
+memcached_server_add_with_weight(Memcached__libmemcached ptr, char *hostname, unsigned int port=0, unsigned int weight)
+
+memcached_return
 memcached_server_add_unix_socket(Memcached__libmemcached ptr, char *socket)
+
+memcached_return
+memcached_server_add_unix_socket_with_weight(Memcached__libmemcached ptr, char *socket, unsigned int weight)
 
 void
 memcached_free(Memcached__libmemcached ptr)
@@ -609,8 +615,51 @@ memcached_decrement(Memcached__libmemcached ptr, \
         lmc_key key, size_t length(key), \
         unsigned int offset, IN_OUT uint64_t value=NO_INIT)
 
+memcached_return
+memcached_increment_by_key(Memcached__libmemcached ptr, \
+        lmc_key master_key, size_t length(master_key), \
+        lmc_key key, size_t length(key), \
+        unsigned int offset, IN_OUT uint64_t value=NO_INIT)
 
+memcached_return
+memcached_decrement_by_key(Memcached__libmemcached ptr, \
+        lmc_key master_key, size_t length(master_key), \
+        lmc_key key, size_t length(key), \
+        unsigned int offset, IN_OUT uint64_t value=NO_INIT)
 
+memcached_return
+memcached_increment_with_initial (Memcached__libmemcached ptr, \
+        lmc_key key, size_t length(key), \
+        unsigned int offset, \
+        uint64_t initial, \
+        lmc_expiration expiration= 0, \
+        IN_OUT uint64_t value=NO_INIT)
+
+memcached_return
+memcached_decrement_with_initial (Memcached__libmemcached ptr, \
+        lmc_key key, size_t length(key), \
+        unsigned int offset, \
+        uint64_t initial, \
+        lmc_expiration expiration= 0, \
+        IN_OUT uint64_t value=NO_INIT)
+
+memcached_return
+memcached_increment_with_initial_by_key (Memcached__libmemcached ptr, \
+        lmc_key master_key, size_t length(master_key), \
+        lmc_key key, size_t length(key), \
+        unsigned int offset, \
+        uint64_t initial, \
+        lmc_expiration expiration= 0, \
+        IN_OUT uint64_t value=NO_INIT)
+
+memcached_return
+memcached_decrement_with_initial_by_key (Memcached__libmemcached ptr, \
+        lmc_key master_key, size_t length(master_key), \
+        lmc_key key, size_t length(key), \
+        unsigned int offset, \
+        uint64_t initial, \
+        lmc_expiration expiration= 0, \
+        IN_OUT uint64_t value=NO_INIT)
 
 
 =head2 Functions for Fetching Values from memcached
@@ -742,71 +791,22 @@ memcached_strerror(Memcached__libmemcached ptr, memcached_return rc)
 const char *
 memcached_lib_version()
 
-void
-memcached_version(Memcached__libmemcached ptr)
-    PREINIT:
-        memcached_stat_st *stat;
-        memcached_return  rc;
-        lmc_state_st* lmc_state;
-        int i;
-        size_t server_count;
-    PPCODE:
-        server_count = memcached_server_count(ptr);
-        lmc_state = LMC_STATE_FROM_PTR(ptr);
-        stat = memcached_stat(ptr, NULL, &rc);
-        if (!stat || !LMC_RETURN_OK(rc)) {
-            LMC_RECORD_RETURN_ERR("memcached_stat", ptr, rc);
-            XSRETURN_NO;
-        }
-
-        for (i = 0; i < server_count; i++) {
-            char **keys;
-            char *val;
-
-            keys = memcached_stat_get_keys(ptr, &stat[i], &rc);
-            while (keys && *keys) {
-                val = memcached_stat_get_value(ptr, stat, *keys, &rc);
-                if (! val) {
-                    keys++;
-                    continue;
-                }
-
-                if ( strNE(*keys, "version") ) {
-                    keys++;
-                    continue;
-                }
-                if (GIMME_V == G_SCALAR) {
-                    SV *version_sv;
-                    version_sv = sv_newmortal();
-                    sv_setpvf(version_sv, "%s", val);
-                    XPUSHs(version_sv);
-                    XSRETURN(1);
-                } else {
-                    SV *version_sv;
-                    char *p = val;
-                    char *c = val;
-                    int count = 0;
-                    while (count < 3 && *c != '\0') {
-                        while (*c != '\0' && *c != '.') {
-                            c++;
-                        }
-                        version_sv = sv_newmortal();
-                        sv_setpvn(version_sv, p, c - p);
-                        XPUSHs(version_sv);
-                        c++;
-                        p = c;
-                        count++;
-                    }
-                    XSRETURN(count);
-                }
-                keys++;
-            }
-        }
-
-
 =head2 Memcached::libmemcached Methods
 
 =cut
+
+IV
+trace_level(Memcached__libmemcached ptr, IV level = IV_MIN)
+    PREINIT:
+        lmc_state_st* lmc_state;
+    CODE:
+        lmc_state = LMC_STATE_FROM_PTR(ptr);
+        RETVAL = LMC_TRACE_LEVEL_FROM_PTR(ptr); /* return previous level */
+        if (level != IV_MIN && lmc_state)
+            lmc_state->trace_level = level;
+    OUTPUT:
+        RETVAL
+
 
 SV *
 errstr(Memcached__libmemcached ptr)
