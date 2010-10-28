@@ -517,6 +517,40 @@ memcached_behavior_get(Memcached__libmemcached ptr, memcached_behavior flag)
 memcached_return
 memcached_behavior_set(Memcached__libmemcached ptr, memcached_behavior flag, uint64_t data)
 
+memcached_return
+memcached_callback_set(Memcached__libmemcached ptr, memcached_callback flag, SV *data)
+    CODE:
+    /* we only allow setting of known-safe flags */
+    switch (flag) {
+    case MEMCACHED_CALLBACK_PREFIX_KEY:
+        RETVAL = memcached_callback_set(ptr, flag, SvPV_nolen(data));
+        break;
+    default:
+        RETVAL = MEMCACHED_FAILURE;
+        break;
+    }
+    OUTPUT:
+        RETVAL
+
+SV *
+memcached_callback_get(Memcached__libmemcached ptr, memcached_callback flag, IN_OUT memcached_return ret=NO_INIT)
+    PREINIT:
+        void *data = NULL;
+    CODE:
+    RETVAL = &PL_sv_undef;
+    /* we only allow setting of known-safe flags */
+    switch (flag) {
+    case MEMCACHED_CALLBACK_PREFIX_KEY:
+        data = memcached_callback_get(ptr, flag, &ret);
+        RETVAL = newSVpv(data, 0);
+        break;
+    default:
+        ret = MEMCACHED_FAILURE;
+        break;
+    }
+    OUTPUT:
+        RETVAL
+
 
 =head2 Functions for Setting Values in memcached
 
