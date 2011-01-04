@@ -9,11 +9,11 @@ Memcached::libmemcached - Thin fast full interface to the libmemcached client AP
 
 =head1 VERSION
 
-Version 0.4404 (with libmemcached-0.44 embedded)
+Version 0.4406 (with libmemcached-0.44 embedded)
 
 =cut
 
-our $VERSION = '0.4405';
+our $VERSION = '0.4406'; # also alter in pod above
 
 use Carp;
 use base qw(Exporter);
@@ -706,6 +706,15 @@ should change it to be a closure instead.
     $trace_level = $memc->trace_level;
 
 Sets the trace level (see L</Tracing Execution>). Returns the previous trace level.
+
+=head3 get_server_for_key
+
+  $memc->get_server_for_key( $key )
+
+This method uses I<memcached_server_by_key> to get information about which server should contain
+the specified $key.
+
+It returns a string containing the hostname:port of the appropriate server, or undef on failure.
 
 =head1 EXTRA INFORMATION
 
