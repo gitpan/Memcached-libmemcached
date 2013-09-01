@@ -8,7 +8,6 @@
 #include "ppport.h"
 
 #include <libmemcached/memcached.h>
-#include <libmemcached/constants.h>
 
 #define MEMCACHED_CALLBACK_MALLOC_FUNCTION 4
 #define MEMCACHED_CALLBACK_REALLOC_FUNCTION 5
@@ -58,7 +57,7 @@ typedef time_t               lmc_expiration;
             if (lmc_state->trace_level > 1 || (lmc_state->trace_level && !LMC_RETURN_OK(ret))) \
                 warn("\t<= %s return %d %s", what, ret, memcached_strerror(ptr, ret)); \
             lmc_state->last_return = ret;   \
-            lmc_state->last_errno  = ptr->cached_errno; /* if MEMCACHED_ERRNO */ \
+            lmc_state->last_errno  = memcached_last_error_errno(ptr); /* if MEMCACHED_ERRNO */ \
         } else { /* should never happen */ \
             warn("LMC_RECORD_RETURN_ERR(%d %s): no lmc_state structure in memcached_st so error not recorded!", \
                 ret, memcached_strerror(ptr, ret)); \
@@ -409,7 +408,7 @@ _fetch_all_into_hashref(memcached_st *ptr, memcached_return rc, HV *dest_ref)
 
 
 static memcached_return_t
-_walk_stats_cb(memcached_server_instance_st instance,
+_walk_stats_cb(const memcached_instance_st *instance,
     const char *key,   size_t key_length,
     const char *value, size_t value_length,
     void *cb)
@@ -432,6 +431,7 @@ _walk_stats_cb(memcached_server_instance_st instance,
 
     return MEMCACHED_SUCCESS;
 }
+
 
 
 MODULE=Memcached::libmemcached  PACKAGE=Memcached::libmemcached
@@ -977,7 +977,7 @@ walk_stats(Memcached__libmemcached ptr, SV *stats_args, CV *cb)
         RETVAL = memcached_stat_execute(clone, SvPV_nolen(stats_args), _walk_stats_cb, cb);
         if (!LMC_RETURN_OK(RETVAL)) {
             LMC_RECORD_RETURN_ERR("memcached_stat_execute", ptr, RETVAL);
-            LMC_STATE_FROM_PTR(ptr)->last_errno = clone->cached_errno;
+            LMC_STATE_FROM_PTR(ptr)->last_errno = memcached_last_error_errno(clone);
             memcached_free(clone);
             XSRETURN_NO;
         }
@@ -991,7 +991,7 @@ walk_stats(Memcached__libmemcached ptr, SV *stats_args, CV *cb)
 SV * get_server_for_key(Memcached__libmemcached ptr, char *key)
     CODE:
         memcached_return_t err;
-        memcached_server_instance_st sp = memcached_server_by_key(ptr, key, strlen(key), &err);
+        const memcached_instance_st *sp = memcached_server_by_key(ptr, key, strlen(key), &err);
         if (sp == NULL)
             XSRETURN_UNDEF;
 
@@ -999,7 +999,7 @@ SV * get_server_for_key(Memcached__libmemcached ptr, char *key)
             memcached_server_name(sp),
             memcached_server_port(sp)
         );
-        memcached_server_free(sp);
+        /* memcached_instance_free(sp); ??? */
     
     OUTPUT:
         RETVAL
