@@ -56,7 +56,7 @@ access to server side methods.
  - Man pages written up on entire API.
  - Implements both modulo and consistent hashing solutions. 
 
-(At the moment Memcached::libmemcached is very new and not all the functions in
+(Memcached::libmemcached is fairly new and not all the functions in
 libmemcached have perl interfaces yet.  It's usually trivial to add functions -
 just a few lines in libmemcached.xs, a few lines of documentation, and a few
 lines of testing.  Volunteers welcome!)
@@ -68,7 +68,7 @@ This documentation provides summary of the functions, along with any issues
 specific to this perl interface, and references to the documentation for the
 corresponding functions in the underlying library.
 
-For more information on libmemcached, see L<http://libmemcached.org>
+For more information on libmemcached, see L<http://docs.libmemcached.org>
 
 =head1 CONVENTIONS
 
@@ -141,7 +141,7 @@ L</errstr> method.
 =head2 Unimplemented Functions
 
 Functions relating to managing lists of servers (memcached_server_push, and
-memcached_server_list) have not been implemenetd because they're not needed and
+memcached_server_list) have not been implemented because they're not needed and
 likely to be deprecated by libmemcached.
 
 Functions relating to iterating through results (memcached_result_*) have not
@@ -169,7 +169,10 @@ functions, for example, you can use:
   use Memcached::libmemcached qw(/^memcached/);
 
 Refer to L<Memcached::libmemcached::constants> for a full list of the available
-constants and the tags they are grouped by.
+constants and the tags they are grouped by. To see a list of all available
+functions and constants you can execute:
+
+  perl -MMemcached::libmemcached -le 'print $_ for @Memcached::libmemcached::EXPORT_OK'
 
 =head1 FUNCTIONS
 
@@ -457,7 +460,7 @@ See L<walk_stats>.
 
   $version = memcached_lib_version()
 
-Returns a simple version string, like "0.15", representing the libmemcached
+Returns a simple version string, like "1.0.17", representing the libmemcached
 version (version of the client library, not server).
 
 =head2 memcached_version
@@ -771,10 +774,10 @@ and Patrick Galbraith and Daisuke Maki for helping with the implementation.
 
 =head1 PORTABILITY
 
-See Slaven Rezic's excellent CPAN Testers Matrix at L<http://bbbike.radzeit.de/~slaven/cpantestersmatrix.cgi?dist=Memcached-libmemcached>
+See Slaven Rezic's excellent CPAN Testers Matrix at L<http://matrix.cpantesters.org/?dist=Memcached-libmemcached>
 
 Along with Dave Cantrell's excellent CPAN Dependency tracker at
-L<http://cpandeps.cantrell.org.uk/?module=Memcached%3A%3Alibmemcached&perl=any+version&os=any+OS>
+L<http://deps.cpantesters.org/?module=Memcached%3A%3Alibmemcached&perl=any+version&os=any+OS>
 
 =head1 BUGS
 
