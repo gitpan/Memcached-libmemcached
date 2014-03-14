@@ -4,10 +4,8 @@ author:
   - 'Tim Bunce <Tim.Bunce@pobox.com>'
 build_requires:
   ExtUtils::MakeMaker: 0
-configure_requires:
-  ExtUtils::MakeMaker: 0
 dynamic_config: 1
-generated_by: 'ExtUtils::MakeMaker version 6.66, CPAN::Meta::Converter version 2.112621'
+generated_by: 'ExtUtils::MakeMaker version 6.8, CPAN::Meta::Converter version 2.132830'
 license: unknown
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -19,4 +17,7 @@ no_index:
     - inc
 requires:
   Test::More: 0
-version: 1.001701
+resources:
+  bugtracker: https://github.com/timbunce/Memcached-libmemcached/issues/
+  repository: git://github.com/timbunce/Memcached-libmemcached.git
+version: 1.001702
