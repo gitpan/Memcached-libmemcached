@@ -39,7 +39,7 @@ int main(int argc, char *argv[])
 {
   options_parse(argc, argv);
 
-  if (opt_servers == false)
+  if (opt_servers == NULL)
   {
     char *temp;
 
@@ -48,7 +48,7 @@ int main(int argc, char *argv[])
       opt_servers= strdup(temp);
     }
 
-    if (opt_servers == false)
+    if (opt_servers == NULL)
     {
       std::cerr << "No Servers provided" << std::endl;
       exit(EXIT_FAILURE);
@@ -158,7 +158,7 @@ void options_parse(int argc, char *argv[])
       opt_expire= (time_t)strtoll(optarg, (char **)NULL, 10);
       if (errno != 0)
       {
-        std::cerr << "Incorrect value passed to --expire: `" << optarg << "`" << std::cerr;
+        std::cerr << "Incorrect value passed to --expire: `" << optarg << "`" << std::endl;
         exit(EXIT_FAILURE);
       }
       break;
